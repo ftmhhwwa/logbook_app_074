@@ -112,10 +112,10 @@ class _CounterViewState extends State<CounterView> {
       ),
       body: Column(
         children: [
-          const SizedBox(height: 30),
+          const SizedBox(height: 20),
           // Bagian Display Angka Utama
           const Text(
-            "Total Hitungan:",
+            "Counter:",
             style: TextStyle(fontSize: 18, color: Colors.grey),
           ),
           Text(
@@ -129,7 +129,7 @@ class _CounterViewState extends State<CounterView> {
 
           //Input Step
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
+            padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 20),
             child: Column(
               children: [
                 TextField(
@@ -156,6 +156,7 @@ class _CounterViewState extends State<CounterView> {
                   onChanged: (value) =>
                       _controller.setStep(int.tryParse(value) ?? 1),
                 ),
+                  const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
