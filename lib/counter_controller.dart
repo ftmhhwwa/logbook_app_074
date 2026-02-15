@@ -34,7 +34,7 @@ class CounterController {
     _addLog("Counter direset menjadi 0 pada jam ${_getTime()}"); // Simpan riwayat
   }
 
-  void resetHistory() {
+  void clearHistory() {
     _history.clear(); // Menghapus isi List 
     _addLog("Riwayat berhasil dibersihkan");
   }
