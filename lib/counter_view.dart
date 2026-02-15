@@ -29,7 +29,19 @@ class _CounterViewState extends State<CounterView> {
               ),
             ),
             const Text("Total Hitungan:"),
-            Text('${_controller.value}', style: const TextStyle(fontSize: 40)),
+            Text('${_controller.value}', style: const TextStyle(fontSize: 40)),            
+            Expanded(
+              child: ListView.builder(
+                shrinkWrap: true, // Agar list tidak mengambil semua ruang jika data sedikit
+                itemCount: _controller.history.length, // Mengambil jumlah data dari controller
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    leading: const Icon(Icons.history),
+                    title: Text(_controller.history[index]), // Menampilkan teks riwayat
+                  );
+                },
+              ),
+            )
           ],
         ),
       ),
