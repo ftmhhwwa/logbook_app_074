@@ -8,6 +8,45 @@ class CounterView extends StatefulWidget {
 }
 
 class _CounterViewState extends State<CounterView> {
+
+void _showResetConfirmation() {
+showDialog(
+  context: context,
+  builder: (BuildContext context) {
+    return AlertDialog(
+      title: const Text("Konfirmasi Reset"),
+      content: const Text("Apakah Anda yakin ingin menghapus seluruh hitungan?"),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context), // Menutup dialog tanpa reset
+          child: const Text("Batal"),
+        ),
+        TextButton(
+          onPressed: () {
+            setState(() {
+              _controller.reset(); // Memanggil logika reset di controller
+            });
+            Navigator.pop(context); // Menutup dialog
+            _showSuccessSnackBar(); // Memanggil SnackBar sukses
+          },
+          child: const Text("Ya, Hapus", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+void _showSuccessSnackBar() {
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text("Data berhasil di-reset!"),
+      backgroundColor: Colors.green,
+      duration: Duration(seconds: 2),
+    ),
+  );
+}
+
   final CounterController _controller = CounterController();
 
   @override
@@ -50,7 +89,24 @@ class _CounterViewState extends State<CounterView> {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           FloatingActionButton(
-            onPressed: () => setState(() => _controller.decrement()),
+            onPressed: () {
+              // Cek hasil fungsi decrement dari controller
+              bool isSuccess = _controller.decrement();
+              
+              if (isSuccess) {
+                // Jika berhasil, perbarui tampilan
+                setState(() {});
+              } else {
+                // Jika gagal (hasil akan minus), tampilkan SnackBar
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text("Gagal: Nilai tidak boleh kurang dari 0!"),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
             child: const Icon(Icons.remove),
           ),
           const SizedBox(width: 10),
@@ -60,8 +116,22 @@ class _CounterViewState extends State<CounterView> {
           ),
           const SizedBox(width: 10),
           FloatingActionButton(
-            onPressed: () => setState(() => _controller.reset()),
+            onPressed: _showResetConfirmation,
             child: const Icon(Icons.refresh),
+          ),
+          const SizedBox(width: 10),
+          FloatingActionButton(
+            onPressed: () {
+              setState(() {
+                _controller.resetHistory(); // Memanggil fungsi reset khusus riwayat
+              });
+              // Tambahkan SnackBar sesuai standar UX Modul 1 
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Riwayat dibersihkan!")),
+              );
+            },
+            backgroundColor: Colors.orange,
+            child: const Icon(Icons.delete_sweep),
           ),
         ],
       ),

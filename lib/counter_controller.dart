@@ -15,22 +15,29 @@ class CounterController {
 
   void increment() {
     _counter += _step; // Increment counter dengan langkah yang ditentukan
-    _addLog("User menambah nilai sebesar $_step pada jam ${_getTime()} sehingga counter menunjukkan angka $_counter"); // Simpan riwayat
+    _addLog("User menambah nilai sebesar $_step pada jam ${_getTime()}"); // Simpan riwayat
   }
 
-  void decrement() { 
+  bool decrement() { 
     if (_counter >= _step) {
       _counter -= _step;
-      _addLog("User mengurangi nilai sebesar $_step pada jam ${_getTime()} sehingga counter menunjukkan angka $_counter"); // Simpan riwayat
+      _addLog("User mengurangi nilai sebesar $_step pada jam ${_getTime()}"); // Simpan riwayat
+      return true;
     } else {
-        _counter = 0;
-        _addLog("Counter direset menjadi 0 pada jam ${_getTime()}"); // Simpan riwayat
+        _addLog("User mencoba mengurangi nilai sebesar $_step pada jam ${_getTime()} tetapi operasi gagal karena nilai counter akan menjadi minus"); // Simpan riwayat
+        return false;
     }
   }
-    void reset() {
-      _counter = 0;
-      _addLog("Counter direset menjadi 0 pada jam ${_getTime()}"); // Simpan riwayat
-    }
+
+  void reset() {
+    _counter = 0;
+    _addLog("Counter direset menjadi 0 pada jam ${_getTime()}"); // Simpan riwayat
+  }
+
+  void resetHistory() {
+    _history.clear(); // Menghapus isi List 
+    _addLog("Riwayat berhasil dibersihkan");
+  }
 
   String _getTime() {
     final now = DateTime.now();
