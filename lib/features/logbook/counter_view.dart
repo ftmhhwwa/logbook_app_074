@@ -12,7 +12,21 @@ class CounterView extends StatefulWidget {
 }
 
 class _CounterViewState extends State<CounterView> {
-  final CounterController _controller = CounterController();
+  late final CounterController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = CounterController(username: widget.username);
+    _loadState();
+  }
+
+  Future<void> _loadState() async {
+    await _controller.load();
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
   void _showResetConfirmation() {
     showDialog(
@@ -152,16 +166,33 @@ class _CounterViewState extends State<CounterView> {
 ),
         ],
       ),
-      body: Center(
+      body: SafeArea(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            const SizedBox(height: 16),
             Text("Selamat Datang, ${widget.username}!"),
             const SizedBox(height: 10),
-            const Text("Total Hitungan Anda:"),
+            const Text("Angka Terakhir:"),
             Text(
               '${_controller.value}',
               style: Theme.of(context).textTheme.headlineLarge,
+            ),
+            const SizedBox(height: 16),
+            const Text("Riwayat Aktivitas"),
+            const SizedBox(height: 8),
+            Expanded(
+              child: _controller.history.isEmpty
+                  ? const Center(child: Text("Belum ada aktivitas"))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _controller.history.length,
+                      itemBuilder: (context, index) {
+                        return ListTile(
+                          leading: const Icon(Icons.access_time),
+                          title: Text(_controller.history[index]),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
