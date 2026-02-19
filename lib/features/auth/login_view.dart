@@ -16,10 +16,50 @@ class _LoginViewState extends State<LoginView> {
   final LoginController _controller = LoginController();
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passController = TextEditingController();
+  bool _isPasswordHidden = true;
+  int _failedAttempts = 0;
+  bool _isLoginDisabled = false;
+  int _disableCountdown = 0;
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _startLoginCooldown() {
+    setState(() {
+      _isLoginDisabled = true;
+      _disableCountdown = 10;
+    });
+
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) {
+        return false;
+      }
+      setState(() {
+        _disableCountdown -= 1;
+      });
+      if (_disableCountdown <= 0) {
+        setState(() {
+          _isLoginDisabled = false;
+          _failedAttempts = 0;
+        });
+        return false;
+      }
+      return true;
+    });
+  }
 
   void _handleLogin() {
     String user = _userController.text;
     String pass = _passController.text;
+
+    if (user.isEmpty || pass.isEmpty) {
+      _showSnackBar("Username dan Password tidak boleh kosong");
+      return;
+    }
 
     bool isSuccess = _controller.login(user, pass);
 
@@ -32,9 +72,11 @@ class _LoginViewState extends State<LoginView> {
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Login Gagal! Gunakan admin/123")),
-      );
+      _failedAttempts += 1;
+      _showSnackBar("Login Gagal! Periksa username dan password");
+      if (_failedAttempts >= 3 && !_isLoginDisabled) {
+        _startLoginCooldown();
+      }
     }
   }
 
@@ -52,11 +94,26 @@ class _LoginViewState extends State<LoginView> {
             ),
             TextField(
               controller: _passController,
-              obscureText: true, // Menyembunyikan teks password
-              decoration: const InputDecoration(labelText: "Password"),
+              obscureText: _isPasswordHidden,
+              decoration: InputDecoration(
+                labelText: "Password",
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _isPasswordHidden ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () => setState(() {
+                    _isPasswordHidden = !_isPasswordHidden;
+                  }),
+                ),
+              ),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(onPressed: _handleLogin, child: const Text("Masuk")),
+            ElevatedButton(
+              onPressed: _isLoginDisabled ? null : _handleLogin,
+              child: Text(
+                _isLoginDisabled ? "Tunggu $_disableCountdown dtk" : "Masuk",
+              ),
+            ),
           ],
         ),
       ),
