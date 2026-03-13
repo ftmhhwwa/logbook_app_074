@@ -4,21 +4,28 @@ import 'package:logbook_app_001/features/onboarding/onboarding_view.dart';
 
 class CounterView extends StatefulWidget {
   final String username; // Menambahkan parameter untuk menerima username
-  
+
   const CounterView({super.key, required this.username});
-  
+
   @override
   State<CounterView> createState() => _CounterViewState();
 }
 
 class _CounterViewState extends State<CounterView> {
   late final CounterController _controller;
+  final TextEditingController _stepController = TextEditingController(text: '1');
 
   @override
   void initState() {
     super.initState();
     _controller = CounterController(username: widget.username);
     _loadState();
+  }
+
+  @override
+  void dispose() {
+    _stepController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadState() async {
@@ -107,10 +114,10 @@ class _CounterViewState extends State<CounterView> {
     );
   }
 
-    void  _showDeleteSnackBar() {
-      setState(() {
-        _controller.clearHistory();
-      });
+  void _showDeleteSnackBar() {
+    setState(() {
+      _controller.clearHistory();
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("Riwayat berhasil dihapus!"),
@@ -131,39 +138,47 @@ class _CounterViewState extends State<CounterView> {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
-            showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text("Konfirmasi Logout"),
-          content: const Text("Apakah Anda yakin? Data yang belum disimpan mungkin akan hilang."),
-          actions: [
-            // Tombol Batal
-            TextButton(
-              onPressed: () => Navigator.pop(context), // Menutup dialog saja
-              child: const Text("Batal"),
-            ),
-            // Tombol Ya, Logout
-            TextButton(
-              onPressed: () {
-                // Menutup dialog
-                Navigator.pop(context); 
-                
-                // 2. Navigasi kembali ke Onboarding (Membersihkan Stack)
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const OnboardingView()),
-                  (route) => false,
-                );
-              },
-              child: const Text("Ya, Keluar", style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
-    );
-  },
-),
+              showDialog(
+                context: context,
+                builder: (BuildContext context) {
+                  return AlertDialog(
+                    title: const Text("Konfirmasi Logout"),
+                    content: const Text(
+                      "Apakah Anda yakin? Data yang belum disimpan mungkin akan hilang.",
+                    ),
+                    actions: [
+                      // Tombol Batal
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pop(context), // Menutup dialog saja
+                        child: const Text("Batal"),
+                      ),
+                      // Tombol Ya, Logout
+                      TextButton(
+                        onPressed: () {
+                          // Menutup dialog
+                          Navigator.pop(context);
+
+                          // 2. Navigasi kembali ke Onboarding (Membersihkan Stack)
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const OnboardingView(),
+                            ),
+                            (route) => false,
+                          );
+                        },
+                        child: const Text(
+                          "Ya, Keluar",
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
         ],
       ),
       body: SafeArea(
@@ -178,7 +193,114 @@ class _CounterViewState extends State<CounterView> {
               style: Theme.of(context).textTheme.headlineLarge,
             ),
             const SizedBox(height: 16),
-            const Text("Riwayat Aktivitas"),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: TextField(
+                controller: _stepController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: 'Set Increment/Decrement step',
+                  labelText: 'Masukkan Step',
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF008080)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF008080),
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 15,
+                  ),
+                ),
+                onChanged: (value) =>
+                    _controller.setStep(int.tryParse(value) ?? 1),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () {
+                    bool isSuccess = _controller.decrement();
+                    if (isSuccess) {
+                      setState(() {});
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "Gagal: Nilai tidak boleh kurang dari 0!",
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.remove, color: Colors.white),
+                  label: const Text(
+                    "Minus",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _showResetConfirmation,
+                  icon: const Icon(Icons.refresh, color: Colors.white),
+                  label: const Text(
+                    "Reset",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => setState(() => _controller.increment()),
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: const Text(
+                    "Tambah",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Riwayat Aktivitas"),
+                  IconButton(
+                    onPressed: _showDeleteConfirmation,
+                    icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                    tooltip: "Hapus Riwayat",
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 8),
             Expanded(
               child: _controller.history.isEmpty
@@ -196,10 +318,6 @@ class _CounterViewState extends State<CounterView> {
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => setState(() => _controller.increment()),
-        child: const Icon(Icons.add),
       ),
     );
   }
