@@ -16,17 +16,17 @@ class _OnboardingViewState extends State<OnboardingView> {
     _OnboardingItem(
       title: 'Catat Aktivitas',
       description: 'Simpan log harian dengan rapi dan cepat.',
-      icon: Icons.edit_note,
+      imagePath: 'assets/images/onboarding1.png',
     ),
     _OnboardingItem(
       title: 'Pantau Progres',
       description: 'Lihat perkembangan setiap hari dalam satu tempat.',
-      icon: Icons.insights,
+      imagePath: 'assets/images/onboarding2.png',
     ),
     _OnboardingItem(
       title: 'Mulai Sekarang',
       description: 'Masuk dan kelola logbook kamu dengan mudah.',
-      icon: Icons.login,
+      imagePath: 'assets/images/onboarding3.png',
     ),
   ];
 
@@ -80,10 +80,10 @@ class _OnboardingViewState extends State<OnboardingView> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          item.icon,
-                          size: 120,
-                          color: Theme.of(context).colorScheme.primary,
+                        Image.asset(
+                          item.imagePath,
+                          height: 220,
+                          fit: BoxFit.contain,
                         ),
                         const SizedBox(height: 24),
                         Text(
@@ -146,12 +146,12 @@ class _OnboardingViewState extends State<OnboardingView> {
 class _OnboardingItem {
   final String title;
   final String description;
-  final IconData icon;
+  final String imagePath;
 
   const _OnboardingItem({
     required this.title,
     required this.description,
-    required this.icon,
+    required this.imagePath,
   });
 }
 

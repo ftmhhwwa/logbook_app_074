@@ -13,11 +13,15 @@ class CounterView extends StatefulWidget {
 
 class _CounterViewState extends State<CounterView> {
   late final CounterController _controller;
-  final TextEditingController _stepController = TextEditingController(text: '1');
+  late final DateTime _loginTime;
+  final TextEditingController _stepController = TextEditingController(
+    text: '1',
+  );
 
   @override
   void initState() {
     super.initState();
+    _loginTime = DateTime.now();
     _controller = CounterController(username: widget.username);
     _loadState();
   }
@@ -33,6 +37,20 @@ class _CounterViewState extends State<CounterView> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  String _greetingByLoginTime() {
+    final hour = _loginTime.hour;
+    if (hour >= 6 && hour <= 11) {
+      return 'Selamat Pagi';
+    }
+    if (hour >= 12 && hour <= 14) {
+      return 'Selamat Siang';
+    }
+    if (hour >= 15 && hour <= 17) {
+      return 'Selamat Sore';
+    }
+    return 'Selamat Malam';
   }
 
   void _showResetConfirmation() {
@@ -185,7 +203,7 @@ class _CounterViewState extends State<CounterView> {
         child: Column(
           children: [
             const SizedBox(height: 16),
-            Text("Selamat Datang, ${widget.username}!"),
+            Text('${_greetingByLoginTime()}, ${widget.username}!'),
             const SizedBox(height: 10),
             const Text("Angka Terakhir:"),
             Text(
