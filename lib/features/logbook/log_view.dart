@@ -3,7 +3,8 @@ import 'package:logbook_app_001/features/logbook/log_controller.dart';
 import 'package:logbook_app_001/features/logbook/models/log_model.dart';
 
 class LogView extends StatefulWidget {
-  const LogView({super.key});
+  final String username;
+  const LogView({super.key, required this.username});
 
   @override
   State<LogView> createState() => _LogViewState();
@@ -133,33 +134,33 @@ void _showEditLogDialog(int index, LogModel log) {
       ],
     ),
   );
+body: ValueListenableBuilder<List<LogModel>>(
+  valueListenable: _controller.logsNotifier,
+  builder: (context, currentLogs, child) {
+    if (currentLogs.isEmpty) return const Center(child: Text("Belum ada catatan."));
+    return ListView.builder(
+      itemCount: currentLogs.length,
+      itemBuilder: (context, index) {
+        final log = currentLogs[index];
+        return Card(
+          child: ListTile(
+            leading: const Icon(Icons.note),
+            title: Text(log.title),
+            subtitle: Text(log.description),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(icon: const Icon(Icons.edit, color: Colors.blue), 
+                  onPressed: () => _showEditLogDialog(index, log)),
+                IconButton(icon: const Icon(Icons.delete, color: Colors.red), 
+                  onPressed: () => _controller.removeLog(index)),
+              ],
+            ),
+          ),
+        );
+      },
+      );
+    },
+    );
+  }
 }
-}
-// body: ValueListenableBuilder<List<LogModel>>(
-//   valueListenable: _controller.logsNotifier,
-//   builder: (context, currentLogs, child) {
-//     if (currentLogs.isEmpty) return const Center(child: Text("Belum ada catatan."));
-//     return ListView.builder(
-//       itemCount: currentLogs.length,
-//       itemBuilder: (context, index) {
-//         final log = currentLogs[index];
-//         return Card(
-//           child: ListTile(
-//             leading: const Icon(Icons.note),
-//             title: Text(log.title),
-//             subtitle: Text(log.description),
-//             trailing: Row(
-//               mainAxisSize: MainAxisSize.min,
-//               children: [
-//                 IconButton(icon: const Icon(Icons.edit, color: Colors.blue), 
-//                   onPressed: () => _showEditLogDialog(index, log)),
-//                 IconButton(icon: const Icon(Icons.delete, color: Colors.red), 
-//                   onPressed: () => _controller.removeLog(index)),
-//               ],
-//             ),
-//           ),
-//         );
-//       },
-//     );
-//   },
-// ),
