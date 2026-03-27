@@ -5,7 +5,6 @@ import 'package:logbook_app_001/features/auth/login_controller.dart';
 // Import View dari fitur lain (Logbook) untuk navigasi
 import 'package:logbook_app_001/features/logbook/log_view.dart';
 
-
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
   @override
@@ -23,9 +22,49 @@ class _LoginViewState extends State<LoginView> {
   int _disableCountdown = 0;
 
   void _showSnackBar(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: colorScheme.inverseSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(
+    BuildContext context, {
+    required String label,
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    const radius = BorderRadius.all(Radius.circular(12));
+
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: Icon(icon),
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+      border: const OutlineInputBorder(borderRadius: radius),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
+      ),
+      labelStyle: theme.textTheme.bodyMedium?.copyWith(
+        color: colorScheme.onSurfaceVariant,
+      ),
+    );
   }
 
   void _startLoginCooldown() {
@@ -91,12 +130,17 @@ class _LoginViewState extends State<LoginView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFFFF3E0), Color(0xFFFFE0B2), Color(0xFFFFCC80)],
+            colors: [
+              colorScheme.surface,
+              colorScheme.primary.withValues(alpha: 0.10),
+              colorScheme.secondary.withValues(alpha: 0.12),
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -109,7 +153,7 @@ class _LoginViewState extends State<LoginView> {
                 constraints: const BoxConstraints(maxWidth: 430),
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.96),
+                  color: colorScheme.surface.withValues(alpha: 0.96),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: const [
                     BoxShadow(
@@ -122,10 +166,10 @@ class _LoginViewState extends State<LoginView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.shield_rounded,
                       size: 54,
-                      color: Color(0xFFEF6C00),
+                      color: colorScheme.primary,
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -133,30 +177,24 @@ class _LoginViewState extends State<LoginView> {
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF3E2723),
+                        color: colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Masuk untuk melanjutkan ke Logbook App',
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF6D4C41),
-                      ),
+                      style: theme.textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 24),
                     TextField(
                       controller: _userController,
                       textInputAction: TextInputAction.next,
-                      decoration: InputDecoration(
-                        labelText: 'Username',
-                        hintText: 'Masukkan username',
-                        prefixIcon: const Icon(Icons.person_outline),
-                        filled: true,
-                        fillColor: const Color(0xFFFFF8F2),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                      decoration: _inputDecoration(
+                        context,
+                        label: 'Username',
+                        hint: 'Masukkan username',
+                        icon: Icons.person_outline,
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -168,15 +206,11 @@ class _LoginViewState extends State<LoginView> {
                           _handleLogin();
                         }
                       },
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        hintText: 'Masukkan password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        filled: true,
-                        fillColor: const Color(0xFFFFF8F2),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                      decoration: _inputDecoration(
+                        context,
+                        label: 'Password',
+                        hint: 'Masukkan password',
+                        icon: Icons.lock_outline,
                         suffixIcon: IconButton(
                           icon: Icon(
                             _isPasswordHidden
@@ -195,11 +229,8 @@ class _LoginViewState extends State<LoginView> {
                       child: ElevatedButton(
                         onPressed: _isLoginDisabled ? null : _handleLogin,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEF6C00),
+                          backgroundColor: const Color(0xFF4E342E),
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
                         ),
                         child: Text(
                           _isLoginDisabled
