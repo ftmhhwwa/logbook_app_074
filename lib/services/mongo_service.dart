@@ -61,6 +61,12 @@ class MongoService {
 
   Future<List<LogModel>> getLogs() async {
     try {
+      await LogHelper.writeLog(
+        "CRUD READ: Mengambil seluruh dokumen log...",
+        source: _source,
+        level: 3,
+      );
+
       final collection = await _getSafeCollection();
 
       await LogHelper.writeLog(
@@ -70,6 +76,11 @@ class MongoService {
       );
 
       final List<Map<String, dynamic>> data = await collection.find().toList();
+      await LogHelper.writeLog(
+        "CRUD READ: Selesai, total ${data.length} dokumen.",
+        source: _source,
+        level: 2,
+      );
       return data.map((json) => LogModel.fromMap(json)).toList();
     } catch (e) {
       await LogHelper.writeLog(
@@ -83,6 +94,12 @@ class MongoService {
 
   Future<void> insertLog(LogModel log) async {
     try {
+      await LogHelper.writeLog(
+        "CRUD CREATE: Menyimpan '${log.title}'...",
+        source: _source,
+        level: 3,
+      );
+
       final collection = await _getSafeCollection();
       await collection.insertOne(log.toMap());
 
@@ -103,6 +120,12 @@ class MongoService {
 
   Future<void> updateLog(LogModel log) async {
     try {
+      await LogHelper.writeLog(
+        "CRUD UPDATE: Memperbarui '${log.title}'...",
+        source: _source,
+        level: 3,
+      );
+
       final collection = await _getSafeCollection();
       if (log.id == null) {
         throw Exception("ID Log tidak ditemukan untuk update");
@@ -127,6 +150,12 @@ class MongoService {
 
   Future<void> deleteLog(ObjectId id) async {
     try {
+      await LogHelper.writeLog(
+        "CRUD DELETE: Menghapus dokumen ID $id...",
+        source: _source,
+        level: 3,
+      );
+
       final collection = await _getSafeCollection();
       await collection.remove(where.id(id));
 

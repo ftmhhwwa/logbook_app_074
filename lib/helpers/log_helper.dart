@@ -1,6 +1,7 @@
 import 'dart:developer' as dev;
 import 'package:intl/intl.dart'; // Tetap kita gunakan untuk presisi waktu
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:logbook_app_001/helpers/log_file_writer.dart';
 
 class LogHelper {
   static Future<void> writeLog(
@@ -12,24 +13,40 @@ class LogHelper {
     final int configLevel = int.tryParse(dotenv.env['LOG_LEVEL'] ?? '2') ?? 2;
     final String muteList = dotenv.env['LOG_MUTE'] ?? '';
 
+    if (_isMuted(source, muteList)) return;
     if (level > configLevel) return;
-    if (muteList.split(',').contains(source)) return;
 
     try {
       // 2. Format Waktu untuk Konsol
       String timestamp = DateFormat('HH:mm:ss').format(DateTime.now());
       String label = _getLabel(level);
       String color = _getColor(level);
+      final String plainLine = '[$timestamp][$label][$source] -> $message';
 
       // 3. Output ke VS Code Debug Console (Non-blocking)
       dev.log(message, name: source, time: DateTime.now(), level: level * 100);
 
-      // 4. Output ke Terminal (Agar Bapak bisa lihat di PC saat flutter run)
-      // Format: [14:30:05] [INFO] [log_view.dart] -> Database Terhubung
-      print('$color[$timestamp][$label][$source] -> $message\x1B[0m');
+      // 4. Output ke file log harian (logs/dd-MM-yyyy.log)
+      await appendLogLine(plainLine);
+
+      // 5. Output ke Terminal hanya saat LOG_LEVEL = 3 (mode verbose penuh)
+      if (configLevel == 3) {
+        // Format: [14:30:05] [INFO] [log_view.dart] -> Database Terhubung
+        print('$color$plainLine\x1B[0m');
+      }
     } catch (e) {
       dev.log("Logging failed: $e", name: "SYSTEM", level: 1000);
     }
+  }
+
+  static bool _isMuted(String source, String muteList) {
+    final mutedSources = muteList
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .where((item) => item.isNotEmpty)
+        .toSet();
+
+    return mutedSources.contains(source.trim().toLowerCase());
   }
 
   static String _getLabel(int level) {
