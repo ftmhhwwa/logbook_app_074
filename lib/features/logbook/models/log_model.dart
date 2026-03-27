@@ -29,7 +29,7 @@ class LogModel {
   // Konversi Object ke Map (JSON) untuk disimpan
   Map<String, dynamic> toMap() {
     return {
-      '_id': id,
+      '_id': id ?? ObjectId(),
       'title': title,
       'date': date,
       'description': description,

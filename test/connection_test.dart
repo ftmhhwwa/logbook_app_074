@@ -30,7 +30,7 @@ void main() {
         expect(dotenv.env['MONGODB_URI'], isNotNull);
 
         await LogHelper.writeLog(
-          "SUCCESS: Koneksi Atlas Terverifikasi",
+          "SUCCESS: Terhubung ke MongoDB Atlas",
           source: sourceFile,
           level: 2, // INFO (Hijau)
         );
