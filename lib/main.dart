@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 //import 'package:logbook_app_001/features/logbook/counter_view.dart';
 import 'package:logbook_app_001/features/onboarding/onboarding_view.dart';
 
-void main() {
+void main() async {
+  // Wajib untuk operasi asinkron sebelum runApp
+  WidgetsFlutterBinding.ensureInitialized();
+  // Load ENV
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 

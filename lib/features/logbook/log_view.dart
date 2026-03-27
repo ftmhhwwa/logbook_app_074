@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:logbook_app_001/features/logbook/log_controller.dart';
 import 'package:logbook_app_001/features/logbook/models/log_model.dart';
 
+
 class LogView extends StatefulWidget {
   final String username;
   const LogView({super.key, required this.username});
@@ -16,6 +17,7 @@ class _LogViewState extends State<LogView> {
   final TextEditingController _contentController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final ValueNotifier<String> _searchQuery = ValueNotifier('');
+  bool _isLoading = true;
 
   final List<String> _categories = [
     'Akademik',
@@ -23,6 +25,23 @@ class _LogViewState extends State<LogView> {
     'Pribadi',
     'Urgent',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_initData);
+  }
+
+  Future<void> _initData() async {
+    setState(() => _isLoading = true);
+    try {
+      await _controller.loadFromDisk();
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -61,6 +80,19 @@ class _LogViewState extends State<LogView> {
                 return ValueListenableBuilder<List<LogModel>>(
                   valueListenable: _controller.logsNotifier,
                   builder: (context, currentLogs, child) {
+                    if (_isLoading) {
+                      return const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text("Menghubungkan ke MongoDB Atlas..."),
+                          ],
+                        ),
+                      );
+                    }
+
                     final filteredLogs = currentLogs.where((log) {
                       return log.title.toLowerCase().contains(
                         query.toLowerCase(),
@@ -70,26 +102,18 @@ class _LogViewState extends State<LogView> {
                     if (currentLogs.isEmpty) {
                       return Center(
                         child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.edit_document,
-                              size: 80,
-                              color: Colors.grey.shade400,
+                            const Icon(
+                              Icons.cloud_off,
+                              size: 64,
+                              color: Colors.grey,
                             ),
                             const SizedBox(height: 16),
-                            Text(
-                              "Belum ada catatan.",
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey.shade600,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              "Ayo mulai menulis logbook hari ini!",
-                              style: TextStyle(color: Colors.grey.shade500),
+                            const Text("Belum ada catatan di Cloud."),
+                            ElevatedButton(
+                              onPressed: _showAddLogDialog,
+                              child: const Text("Buat Catatan Pertama"),
                             ),
                           ],
                         ),
