@@ -14,6 +14,22 @@ class MongoService {
   factory MongoService() => _instance;
   MongoService._internal();
 
+  void _assertLogAccess(
+    LogModel log, {
+    required String currentUserId,
+    required String currentUserRole,
+    required String currentUserTeamId,
+  }) {
+    final hasAccess =
+        log.authorId == currentUserId ||
+        log.teamId == currentUserTeamId ||
+        currentUserRole == 'Ketua';
+
+    if (!hasAccess) {
+      throw Exception("Security Breach: Anda tidak memiliki akses!");
+    }
+  }
+
   Future<DbCollection> _getSafeCollection() async {
     if (_db == null || !_db!.isConnected || _collection == null) {
       await LogHelper.writeLog(
@@ -59,28 +75,20 @@ class MongoService {
     }
   }
 
-  Future<List<LogModel>> getLogs() async {
+  /// READ: Mengambil data dari Cloud
+  Future<List<LogModel>> getLogs(String teamId) async {
     try {
+      final collection = await _getSafeCollection(); // Gunakan jalur aman
+
       await LogHelper.writeLog(
-        "CRUD READ: Mengambil seluruh dokumen log...",
+        "INFO: Fetching data for Team: $teamId",
         source: _source,
         level: 3,
       );
 
-      final collection = await _getSafeCollection();
-
-      await LogHelper.writeLog(
-        "INFO: Fetching data from Cloud...",
-        source: _source,
-        level: 3,
-      );
-
-      final List<Map<String, dynamic>> data = await collection.find().toList();
-      await LogHelper.writeLog(
-        "CRUD READ: Selesai, total ${data.length} dokumen.",
-        source: _source,
-        level: 2,
-      );
+      final List<Map<String, dynamic>> data = await collection
+          .find(where.eq('teamId', teamId))
+          .toList();
       return data.map((json) => LogModel.fromMap(json)).toList();
     } catch (e) {
       await LogHelper.writeLog(
@@ -88,7 +96,7 @@ class MongoService {
         source: _source,
         level: 1,
       );
-      rethrow;
+      return [];
     }
   }
 
@@ -118,8 +126,20 @@ class MongoService {
     }
   }
 
-  Future<void> updateLog(LogModel log) async {
+  Future<void> updateLog(
+    LogModel log, {
+    required String currentUserId,
+    required String currentUserRole,
+    required String currentUserTeamId,
+  }) async {
     try {
+      _assertLogAccess(
+        log,
+        currentUserId: currentUserId,
+        currentUserRole: currentUserRole,
+        currentUserTeamId: currentUserTeamId,
+      );
+
       await LogHelper.writeLog(
         "CRUD UPDATE: Memperbarui '${log.title}'...",
         source: _source,
@@ -131,7 +151,10 @@ class MongoService {
         throw Exception("ID Log tidak ditemukan untuk update");
       }
 
-      await collection.replaceOne(where.id(log.id!), log.toMap());
+      await collection.replaceOne(
+        where.id(ObjectId.fromHexString(log.id!)),
+        log.toMap(),
+      );
 
       await LogHelper.writeLog(
         "DATABASE: Update '${log.title}' Berhasil",
@@ -148,19 +171,35 @@ class MongoService {
     }
   }
 
-  Future<void> deleteLog(ObjectId id) async {
+  Future<void> deleteLog(
+    LogModel log, {
+    required String currentUserId,
+    required String currentUserRole,
+    required String currentUserTeamId,
+  }) async {
     try {
+      _assertLogAccess(
+        log,
+        currentUserId: currentUserId,
+        currentUserRole: currentUserRole,
+        currentUserTeamId: currentUserTeamId,
+      );
+
+      if (log.id == null) {
+        throw Exception("ID Log tidak ditemukan untuk delete");
+      }
+
       await LogHelper.writeLog(
-        "CRUD DELETE: Menghapus dokumen ID $id...",
+        "CRUD DELETE: Menghapus dokumen ID ${log.id}...",
         source: _source,
         level: 3,
       );
 
       final collection = await _getSafeCollection();
-      await collection.remove(where.id(id));
+      await collection.remove(where.id(ObjectId.fromHexString(log.id!)));
 
       await LogHelper.writeLog(
-        "DATABASE: Hapus ID $id Berhasil",
+        "DATABASE: Hapus ID ${log.id} Berhasil",
         source: _source,
         level: 2,
       );

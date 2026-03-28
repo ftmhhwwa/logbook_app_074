@@ -1,13 +1,29 @@
+import 'dart:async';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:logbook_app_001/features/auth/login_view.dart';
+import 'package:logbook_app_001/features/logbook/log_editor_page.dart';
 import 'package:logbook_app_001/features/logbook/models/log_model.dart';
+import 'package:logbook_app_001/helpers/access_policy.dart';
 import 'package:logbook_app_001/services/mongo_service.dart';
 
 class LogView extends StatefulWidget {
   final String username;
-  const LogView({super.key, required this.username});
+  final String userTeamId;
+  final String currentUserId;
+  final String userRole;
+
+  const LogView({
+    super.key,
+    required this.username,
+    this.userTeamId = 'MEKTRA_KLP_01',
+    required this.currentUserId,
+    this.userRole = 'Anggota',
+  });
 
   @override
   State<LogView> createState() => _LogViewState();
@@ -15,28 +31,55 @@ class LogView extends StatefulWidget {
 
 class _LogViewState extends State<LogView> {
   final MongoService _mongoService = MongoService();
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _contentController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final ValueNotifier<String> _searchQuery = ValueNotifier('');
+  StreamSubscription<dynamic>? _connectivitySubscription;
+  bool _isOffline = false;
   late Future<List<LogModel>> _logsFuture;
-
-  final List<String> _categories = [
-    'Akademik',
-    'Pekerjaan',
-    'Pribadi',
-    'Urgent',
-  ];
 
   @override
   void initState() {
     super.initState();
+    _initConnectivityStatus();
     _logsFuture = _fetchLogs();
+  }
+
+  Future<void> _initConnectivityStatus() async {
+    final connectivityResult = await Connectivity().checkConnectivity();
+    if (!mounted) return;
+
+    setState(() {
+      _isOffline = _isConnectivityOffline(connectivityResult);
+    });
+
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      dynamic result,
+    ) {
+      final isOfflineNow = _isConnectivityOffline(result);
+      if (!mounted) return;
+      if (_isOffline == isOfflineNow) return;
+
+      setState(() {
+        _isOffline = isOfflineNow;
+      });
+    });
+  }
+
+  bool _isConnectivityOffline(dynamic connectivityResult) {
+    if (connectivityResult is ConnectivityResult) {
+      return connectivityResult == ConnectivityResult.none;
+    }
+
+    if (connectivityResult is List<ConnectivityResult>) {
+      return connectivityResult.contains(ConnectivityResult.none);
+    }
+
+    return false;
   }
 
   Future<List<LogModel>> _fetchLogs() async {
     await initializeDateFormatting('id_ID');
-    return _mongoService.getLogs();
+    return _mongoService.getLogs(widget.userTeamId);
   }
 
   void _refreshLogs() {
@@ -44,6 +87,22 @@ class _LogViewState extends State<LogView> {
     setState(() {
       _logsFuture = _fetchLogs();
     });
+  }
+
+  Future<void> _goToEditor({required LogModel log}) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LogEditorPage(
+          log: log,
+          currentUserId: widget.currentUserId,
+          currentUserRole: widget.userRole,
+          currentUserTeamId: widget.userTeamId,
+        ),
+      ),
+    );
+
+    _refreshLogs();
   }
 
   Future<void> _pullToRefresh() async {
@@ -122,33 +181,6 @@ class _LogViewState extends State<LogView> {
     }
   }
 
-  InputDecoration _dialogInputDecoration(
-    BuildContext context, {
-    required String label,
-    IconData? icon,
-  }) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: icon != null ? Icon(icon) : null,
-      filled: true,
-      fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: colorScheme.outlineVariant),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: colorScheme.primary, width: 1.4),
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    );
-  }
-
   Future<void> _handleLogout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
@@ -184,8 +216,7 @@ class _LogViewState extends State<LogView> {
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _contentController.dispose();
+    _connectivitySubscription?.cancel();
     _searchController.dispose();
     _searchQuery.dispose();
     super.dispose();
@@ -204,6 +235,13 @@ class _LogViewState extends State<LogView> {
         backgroundColor: const Color(0xFF4E342E),
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            onPressed: null,
+            icon: Icon(
+              _isOffline ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
+            ),
+            tooltip: _isOffline ? 'Offline' : 'Online',
+          ),
           IconButton(
             onPressed: _handleLogout,
             icon: const Icon(Icons.logout_rounded),
@@ -399,7 +437,16 @@ class _LogViewState extends State<LogView> {
                                 ),
                                 const SizedBox(height: 12),
                                 ElevatedButton.icon(
-                                  onPressed: _showAddLogDialog,
+                                  onPressed: () => _goToEditor(
+                                    log: LogModel(
+                                      id: '',
+                                      title: '',
+                                      description: '',
+                                      date: '',
+                                      authorId: widget.currentUserId,
+                                      teamId: widget.userTeamId,
+                                    ),
+                                  ),
                                   icon: const Icon(Icons.add_rounded),
                                   label: const Text('Buat Catatan Pertama'),
                                 ),
@@ -427,6 +474,18 @@ class _LogViewState extends State<LogView> {
                           itemCount: filteredLogs.length,
                           itemBuilder: (context, index) {
                             final log = filteredLogs[index];
+                            final isOwner =
+                                log.authorId == widget.currentUserId;
+                            final canUpdate = AccessPolicy.canPerform(
+                              widget.userRole,
+                              'update',
+                              isOwner: isOwner,
+                            );
+                            final canDelete = AccessPolicy.canPerform(
+                              widget.userRole,
+                              'delete',
+                              isOwner: isOwner,
+                            );
                             final categoryBg = _categoryTint(
                               colorScheme,
                               log.category,
@@ -488,11 +547,15 @@ class _LogViewState extends State<LogView> {
                                                 ),
                                           ),
                                           const SizedBox(height: 4),
-                                          Text(
-                                            log.description,
-                                            maxLines: 3,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: theme.textTheme.bodyMedium,
+                                          MarkdownBody(
+                                            data: log.description,
+                                            shrinkWrap: true,
+                                            styleSheet:
+                                                MarkdownStyleSheet.fromTheme(
+                                                  theme,
+                                                ).copyWith(
+                                                  p: theme.textTheme.bodyMedium,
+                                                ),
                                           ),
                                           const SizedBox(height: 8),
                                           Wrap(
@@ -540,93 +603,104 @@ class _LogViewState extends State<LogView> {
                                           visualDensity: VisualDensity.compact,
                                           icon: Icon(
                                             Icons.edit_rounded,
-                                            color: colorScheme.primary,
+                                            color: canUpdate
+                                                ? colorScheme.primary
+                                                : colorScheme.outline,
                                           ),
-                                          onPressed: () =>
-                                              _showEditLogDialog(log),
+                                          onPressed: canUpdate
+                                              ? () => _goToEditor(log: log)
+                                              : null,
                                         ),
-                                        IconButton(
-                                          visualDensity: VisualDensity.compact,
-                                          icon: Icon(
-                                            Icons.delete_outline_rounded,
-                                            color: colorScheme.error,
-                                          ),
-                                          onPressed: () async {
-                                            final shouldDelete =
-                                                await showDialog<bool>(
-                                                  context: context,
-                                                  builder: (dialogContext) =>
-                                                      AlertDialog(
-                                                        title: const Text(
-                                                          'Hapus Catatan',
-                                                        ),
-                                                        content: const Text(
-                                                          'Yakin ingin menghapus catatan ini?',
-                                                        ),
-                                                        actions: [
-                                                          TextButton(
-                                                            onPressed: () =>
-                                                                Navigator.pop(
-                                                                  dialogContext,
-                                                                  false,
-                                                                ),
-                                                            child: const Text(
-                                                              'Batal',
-                                                            ),
+                                        if (canDelete)
+                                          IconButton(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            icon: Icon(
+                                              Icons.delete_outline_rounded,
+                                              color: colorScheme.error,
+                                            ),
+                                            onPressed: () async {
+                                              final shouldDelete =
+                                                  await showDialog<bool>(
+                                                    context: context,
+                                                    builder: (dialogContext) =>
+                                                        AlertDialog(
+                                                          title: const Text(
+                                                            'Hapus Catatan',
                                                           ),
-                                                          ElevatedButton(
-                                                            onPressed: () =>
-                                                                Navigator.pop(
-                                                                  dialogContext,
-                                                                  true,
-                                                                ),
-                                                            child: const Text(
-                                                              'Hapus',
-                                                            ),
+                                                          content: const Text(
+                                                            'Yakin ingin menghapus catatan ini?',
                                                           ),
-                                                        ],
-                                                      ),
-                                                );
+                                                          actions: [
+                                                            TextButton(
+                                                              onPressed: () =>
+                                                                  Navigator.pop(
+                                                                    dialogContext,
+                                                                    false,
+                                                                  ),
+                                                              child: const Text(
+                                                                'Batal',
+                                                              ),
+                                                            ),
+                                                            ElevatedButton(
+                                                              onPressed: () =>
+                                                                  Navigator.pop(
+                                                                    dialogContext,
+                                                                    true,
+                                                                  ),
+                                                              child: const Text(
+                                                                'Hapus',
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                  );
 
-                                            if (shouldDelete != true) {
-                                              return;
-                                            }
+                                              if (shouldDelete != true) {
+                                                return;
+                                              }
 
-                                            if (log.id == null) {
-                                              if (!context.mounted) return;
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'ID log tidak ditemukan.',
-                                                  ),
-                                                ),
-                                              );
-                                              return;
-                                            }
-
-                                            try {
-                                              await _mongoService.deleteLog(
-                                                log.id!,
-                                              );
-                                              _refreshLogs();
-                                            } catch (e) {
-                                              if (!context.mounted) return;
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                SnackBar(
-                                                  content: Text(
-                                                    _friendlyConnectionMessage(
-                                                      e,
+                                              if (log.id == null) {
+                                                if (!context.mounted) return;
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'ID log tidak ditemukan.',
                                                     ),
                                                   ),
-                                                ),
-                                              );
-                                            }
-                                          },
-                                        ),
+                                                );
+                                                return;
+                                              }
+
+                                              try {
+                                                await _mongoService.deleteLog(
+                                                  log,
+                                                  currentUserId:
+                                                      widget.currentUserId,
+                                                  currentUserRole:
+                                                      widget.userRole,
+                                                  currentUserTeamId:
+                                                      widget.userTeamId,
+                                                );
+                                                _refreshLogs();
+                                              } catch (e) {
+                                                if (!context.mounted) return;
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      _friendlyConnectionMessage(
+                                                        e,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            },
+                                          ),
                                       ],
                                     ),
                                   ],
@@ -645,255 +719,19 @@ class _LogViewState extends State<LogView> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddLogDialog,
+        onPressed: () => _goToEditor(
+          log: LogModel(
+            id: '',
+            title: '',
+            description: '',
+            date: '',
+            authorId: widget.currentUserId,
+            teamId: widget.userTeamId,
+          ),
+        ),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
         child: const Icon(Icons.add_rounded),
-      ),
-    );
-  }
-
-  void _showAddLogDialog() {
-    _titleController.clear();
-    _contentController.clear();
-    String selectedCategory = _categories.first;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (dialogContext, setStateDialog) {
-          final theme = Theme.of(dialogContext);
-          final colorScheme = theme.colorScheme;
-
-          return AlertDialog(
-            backgroundColor: colorScheme.surface.withValues(alpha: 0.96),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-            contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-            actionsPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-            title: Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: colorScheme.primary.withValues(alpha: 0.16),
-                  child: Icon(
-                    Icons.note_add_rounded,
-                    color: colorScheme.primary,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Tambah Catatan Baru',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _titleController,
-                  decoration: _dialogInputDecoration(
-                    dialogContext,
-                    label: 'Judul Catatan',
-                    icon: Icons.title_rounded,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _contentController,
-                  maxLines: 3,
-                  minLines: 2,
-                  decoration: _dialogInputDecoration(
-                    dialogContext,
-                    label: 'Isi Deskripsi',
-                    icon: Icons.subject_rounded,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedCategory,
-                  decoration: _dialogInputDecoration(
-                    dialogContext,
-                    label: 'Kategori',
-                    icon: Icons.category_outlined,
-                  ),
-                  items: _categories.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(category),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setStateDialog(() => selectedCategory = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Batal'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final newLog = LogModel(
-                    title: _titleController.text,
-                    description: _contentController.text,
-                    date: DateTime.now().toIso8601String(),
-                    category: selectedCategory,
-                  );
-
-                  try {
-                    await _mongoService.insertLog(newLog);
-                    if (!dialogContext.mounted) return;
-                    Navigator.pop(dialogContext);
-                    _refreshLogs();
-                  } catch (e) {
-                    if (!dialogContext.mounted) return;
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      SnackBar(content: Text(_friendlyConnectionMessage(e))),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.save_rounded, size: 18),
-                label: const Text('Simpan'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _showEditLogDialog(LogModel log) {
-    _titleController.text = log.title;
-    _contentController.text = log.description;
-
-    // Pastikan kategori yang tersimpan ada dalam list, jika tidak gunakan default
-    String selectedCategory = _categories.contains(log.category)
-        ? log.category
-        : _categories.first;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (dialogContext, setStateDialog) {
-          final theme = Theme.of(dialogContext);
-          final colorScheme = theme.colorScheme;
-
-          return AlertDialog(
-            backgroundColor: colorScheme.surface.withValues(alpha: 0.96),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-            contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-            actionsPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-            title: Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: colorScheme.primary.withValues(alpha: 0.16),
-                  child: Icon(
-                    Icons.edit_note_rounded,
-                    color: colorScheme.primary,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  'Edit Catatan',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _titleController,
-                  decoration: _dialogInputDecoration(
-                    dialogContext,
-                    label: 'Judul Catatan',
-                    icon: Icons.title_rounded,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _contentController,
-                  maxLines: 3,
-                  minLines: 2,
-                  decoration: _dialogInputDecoration(
-                    dialogContext,
-                    label: 'Isi Deskripsi',
-                    icon: Icons.subject_rounded,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  initialValue: selectedCategory,
-                  decoration: _dialogInputDecoration(
-                    dialogContext,
-                    label: 'Kategori',
-                    icon: Icons.category_outlined,
-                  ),
-                  items: _categories.map((category) {
-                    return DropdownMenuItem(
-                      value: category,
-                      child: Text(category),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setStateDialog(() => selectedCategory = value);
-                    }
-                  },
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Batal'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final updatedLog = LogModel(
-                    id: log.id,
-                    title: _titleController.text,
-                    description: _contentController.text,
-                    date: DateTime.now().toIso8601String(),
-                    category: selectedCategory,
-                  );
-
-                  try {
-                    await _mongoService.updateLog(updatedLog);
-                    if (!dialogContext.mounted) return;
-                    Navigator.pop(dialogContext);
-                    _refreshLogs();
-                  } catch (e) {
-                    if (!dialogContext.mounted) return;
-                    ScaffoldMessenger.of(dialogContext).showSnackBar(
-                      SnackBar(content: Text(_friendlyConnectionMessage(e))),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.save_as_rounded, size: 18),
-                label: const Text('Update'),
-              ),
-            ],
-          );
-        },
       ),
     );
   }

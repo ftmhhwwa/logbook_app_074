@@ -104,11 +104,13 @@ class _LoginViewState extends State<LoginView> {
     bool isSuccess = _controller.login(user, pass);
 
     if (isSuccess) {
+      final userRole = _controller.getUserRole(user);
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           // Di sini kita kirimkan variabel 'user' ke parameter 'username' di LogView
-          builder: (context) => LogView(username: user),
+          builder: (context) =>
+              LogView(username: user, currentUserId: user, userRole: userRole),
         ),
       );
     } else {
