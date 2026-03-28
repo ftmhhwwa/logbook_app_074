@@ -182,6 +182,11 @@ class LogController {
       authorId: oldLog.authorId,
     );
 
+    // Simpan lokal dulu agar UI tetap instan saat offline.
+    currentLogs[index] = updatedLog;
+    logsNotifier.value = currentLogs;
+    await _myBox.putAt(index, updatedLog);
+
     try {
       // 1. Jalankan update di MongoService (Tunggu konfirmasi Cloud)
       await MongoService().updateLog(
@@ -191,10 +196,6 @@ class LogController {
         currentUserTeamId: userTeamId,
       );
 
-      // 2. Jika sukses, baru perbarui state lokal
-      currentLogs[index] = updatedLog;
-      logsNotifier.value = currentLogs;
-
       await LogHelper.writeLog(
         "SUCCESS: Sinkronisasi Update '${oldLog.title}' Berhasil",
         source: "log_controller.dart",
@@ -202,11 +203,10 @@ class LogController {
       );
     } catch (e) {
       await LogHelper.writeLog(
-        "ERROR: Gagal sinkronisasi Update - $e",
+        "WARNING: Update tersimpan lokal, sinkron cloud gagal - $e",
         source: "log_controller.dart",
         level: 1,
       );
-      // Data di UI tidak berubah jika proses di Cloud gagal
     }
   }
 
@@ -237,6 +237,11 @@ class LogController {
         );
       }
 
+      // Hapus lokal dulu agar UI tetap instan saat offline.
+      currentLogs.removeAt(index);
+      logsNotifier.value = currentLogs;
+      await _myBox.deleteAt(index);
+
       // 1. Hapus data di MongoDB Atlas (Tunggu konfirmasi Cloud)
       await MongoService().deleteLog(
         targetLog,
@@ -245,10 +250,6 @@ class LogController {
         currentUserTeamId: userTeamId,
       );
 
-      // 2. Jika sukses, baru hapus dari state lokal
-      currentLogs.removeAt(index);
-      logsNotifier.value = currentLogs;
-
       await LogHelper.writeLog(
         "SUCCESS: Sinkronisasi Hapus '${targetLog.title}' Berhasil",
         source: "log_controller.dart",
@@ -256,7 +257,7 @@ class LogController {
       );
     } catch (e) {
       await LogHelper.writeLog(
-        "ERROR: Gagal sinkronisasi Hapus - $e",
+        "WARNING: Hapus tersimpan lokal, sinkron cloud gagal - $e",
         source: "log_controller.dart",
         level: 1,
       );

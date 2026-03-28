@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:logbook_app_001/features/logbook/log_controller.dart';
 import 'package:logbook_app_001/features/logbook/models/log_model.dart';
 import 'package:logbook_app_001/helpers/access_policy.dart';
-import 'package:logbook_app_001/services/mongo_service.dart';
 
 class LogEditorPage extends StatefulWidget {
   final LogModel log;
+  final int? index;
+  final LogController controller;
   final String currentUserId;
   final String currentUserRole;
   final String currentUserTeamId;
@@ -13,6 +15,8 @@ class LogEditorPage extends StatefulWidget {
   const LogEditorPage({
     super.key,
     required this.log,
+    this.index,
+    required this.controller,
     required this.currentUserId,
     required this.currentUserRole,
     required this.currentUserTeamId,
@@ -23,7 +27,6 @@ class LogEditorPage extends StatefulWidget {
 }
 
 class _LogEditorPageState extends State<LogEditorPage> {
-  final MongoService _mongoService = MongoService();
   late TextEditingController _titleController;
   late TextEditingController _descController;
   final List<String> _categories = [
@@ -87,31 +90,22 @@ class _LogEditorPageState extends State<LogEditorPage> {
 
     try {
       if (_isAddMode) {
-        final newLog = LogModel(
-          id: null,
-          title: _titleController.text.trim(),
-          description: _descController.text.trim(),
-          date: DateTime.now().toIso8601String(),
-          category: _selectedCategory,
-          authorId: widget.currentUserId,
-          teamId: widget.currentUserTeamId,
+        await widget.controller.addLog(
+          _titleController.text.trim(),
+          _descController.text.trim(),
+          widget.currentUserId,
+          widget.currentUserTeamId,
         );
-        await _mongoService.insertLog(newLog);
       } else {
-        final updatedLog = LogModel(
-          id: widget.log.id,
-          title: _titleController.text.trim(),
-          description: _descController.text.trim(),
-          date: DateTime.now().toIso8601String(),
-          category: _selectedCategory,
-          authorId: widget.log.authorId,
-          teamId: widget.log.teamId,
-        );
-        await _mongoService.updateLog(
-          updatedLog,
-          currentUserId: widget.currentUserId,
-          currentUserRole: widget.currentUserRole,
-          currentUserTeamId: widget.currentUserTeamId,
+        if (widget.index == null) {
+          throw Exception('Index log tidak ditemukan untuk update.');
+        }
+
+        await widget.controller.updateLog(
+          widget.index!,
+          _titleController.text.trim(),
+          _descController.text.trim(),
+          _selectedCategory,
         );
       }
 

@@ -6,6 +6,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 import 'package:logbook_app_001/features/auth/login_view.dart';
+import 'package:logbook_app_001/features/logbook/log_controller.dart';
 import 'package:logbook_app_001/features/logbook/log_editor_page.dart';
 import 'package:logbook_app_001/features/logbook/models/log_model.dart';
 import 'package:logbook_app_001/helpers/access_policy.dart';
@@ -31,17 +32,22 @@ class LogView extends StatefulWidget {
 
 class _LogViewState extends State<LogView> {
   final MongoService _mongoService = MongoService();
+  late final LogController _controller;
   final TextEditingController _searchController = TextEditingController();
   final ValueNotifier<String> _searchQuery = ValueNotifier('');
   StreamSubscription<dynamic>? _connectivitySubscription;
   bool _isOffline = false;
-  late Future<List<LogModel>> _logsFuture;
 
   @override
   void initState() {
     super.initState();
+    _controller = LogController(
+      userTeamId: widget.userTeamId,
+      currentUserId: widget.currentUserId,
+      userRole: widget.userRole,
+    );
     _initConnectivityStatus();
-    _logsFuture = _fetchLogs();
+    initializeDateFormatting('id_ID');
   }
 
   Future<void> _initConnectivityStatus() async {
@@ -77,53 +83,28 @@ class _LogViewState extends State<LogView> {
     return false;
   }
 
-  Future<List<LogModel>> _fetchLogs() async {
-    await initializeDateFormatting('id_ID');
-    return _mongoService.getLogs(widget.userTeamId);
-  }
-
   void _refreshLogs() {
-    if (!mounted) return;
-    setState(() {
-      _logsFuture = _fetchLogs();
-    });
+    _controller.loadLogs(widget.userTeamId);
   }
 
-  Future<void> _goToEditor({required LogModel log}) async {
+  Future<void> _goToEditor({required LogModel log, int? index}) async {
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => LogEditorPage(
           log: log,
+          index: index,
+          controller: _controller,
           currentUserId: widget.currentUserId,
           currentUserRole: widget.userRole,
           currentUserTeamId: widget.userTeamId,
         ),
       ),
     );
-
-    _refreshLogs();
   }
 
   Future<void> _pullToRefresh() async {
-    _refreshLogs();
-    try {
-      await _logsFuture;
-    } catch (_) {
-      // Error ditampilkan lewat FutureBuilder.
-    }
-  }
-
-  String _friendlyConnectionMessage(Object? error) {
-    final message = (error ?? '').toString().toLowerCase();
-    if (message.contains('socket') ||
-        message.contains('timeout') ||
-        message.contains('network') ||
-        message.contains('failed host lookup')) {
-      return 'Offline Mode Warning: Koneksi internet terputus. Periksa jaringan, lalu coba lagi.';
-    }
-
-    return 'Offline Mode Warning: Gagal menghubungi MongoDB Atlas. Silakan coba beberapa saat lagi.';
+    await _controller.loadLogs(widget.userTeamId);
   }
 
   String _formatLogTimestamp(String rawDate) {
@@ -327,72 +308,9 @@ class _LogViewState extends State<LogView> {
               child: ValueListenableBuilder<String>(
                 valueListenable: _searchQuery,
                 builder: (context, query, child) {
-                  return FutureBuilder<List<LogModel>>(
-                    future: _logsFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircularProgressIndicator(
-                                color: colorScheme.primary,
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Menghubungkan ke MongoDB Atlas...',
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 20),
-                            padding: const EdgeInsets.all(18),
-                            decoration: BoxDecoration(
-                              color: colorScheme.surface.withValues(
-                                alpha: 0.94,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.wifi_off_rounded,
-                                  color: colorScheme.error,
-                                  size: 42,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'Offline Mode Warning',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _friendlyConnectionMessage(snapshot.error),
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.bodyMedium,
-                                ),
-                                const SizedBox(height: 12),
-                                ElevatedButton.icon(
-                                  onPressed: _refreshLogs,
-                                  icon: const Icon(Icons.refresh_rounded),
-                                  label: const Text('Coba Lagi'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }
-
-                      final currentLogs = snapshot.data ?? [];
+                  return ValueListenableBuilder<List<LogModel>>(
+                    valueListenable: _controller.logsNotifier,
+                    builder: (context, currentLogs, _) {
                       final filteredLogs = currentLogs.where((log) {
                         return log.title.toLowerCase().contains(
                               query.toLowerCase(),
@@ -608,7 +526,23 @@ class _LogViewState extends State<LogView> {
                                                 : colorScheme.outline,
                                           ),
                                           onPressed: canUpdate
-                                              ? () => _goToEditor(log: log)
+                                              ? () {
+                                                  final originalIndex =
+                                                      currentLogs.indexWhere(
+                                                        (item) =>
+                                                            item.id == log.id &&
+                                                            item.title ==
+                                                                log.title &&
+                                                            item.date ==
+                                                                log.date,
+                                                      );
+                                                  _goToEditor(
+                                                    log: log,
+                                                    index: originalIndex == -1
+                                                        ? null
+                                                        : originalIndex,
+                                                  );
+                                                }
                                               : null,
                                         ),
                                         if (canDelete)
@@ -674,29 +608,38 @@ class _LogViewState extends State<LogView> {
                                                 return;
                                               }
 
-                                              try {
-                                                await _mongoService.deleteLog(
-                                                  log,
-                                                  currentUserId:
-                                                      widget.currentUserId,
-                                                  currentUserRole:
-                                                      widget.userRole,
-                                                  currentUserTeamId:
-                                                      widget.userTeamId,
+                                              final originalIndex = currentLogs
+                                                  .indexWhere(
+                                                    (item) =>
+                                                        item.id == log.id &&
+                                                        item.title ==
+                                                            log.title &&
+                                                        item.date == log.date,
+                                                  );
+                                              if (originalIndex == -1) {
+                                                if (!context.mounted) return;
+                                                ScaffoldMessenger.of(
+                                                  context,
+                                                ).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                      'Data log tidak ditemukan di daftar.',
+                                                    ),
+                                                  ),
                                                 );
-                                                _refreshLogs();
+                                                return;
+                                              }
+
+                                              try {
+                                                await _controller.removeLog(
+                                                  originalIndex,
+                                                );
                                               } catch (e) {
                                                 if (!context.mounted) return;
                                                 ScaffoldMessenger.of(
                                                   context,
                                                 ).showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      _friendlyConnectionMessage(
-                                                        e,
-                                                      ),
-                                                    ),
-                                                  ),
+                                                  SnackBar(content: Text('$e')),
                                                 );
                                               }
                                             },
