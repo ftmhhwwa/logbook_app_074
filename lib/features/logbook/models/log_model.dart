@@ -29,6 +29,9 @@ class LogModel {
   @HiveField(7, defaultValue: false)
   final bool isSynced;
 
+  @HiveField(8, defaultValue: false)
+  final bool isPublic;
+
   LogModel({
     this.id,
     required this.title,
@@ -38,6 +41,7 @@ class LogModel {
     required this.teamId,
     required this.authorId,
     this.isSynced = false,
+    this.isPublic = false,
   });
 
   // Untuk Tugas HOTS: Konversi Map (JSON) ke Object
@@ -51,6 +55,7 @@ class LogModel {
       teamId: map['teamId'] ?? 'no_team',
       authorId: map['authorId'] ?? 'unknown_user',
       isSynced: true,
+      isPublic: map['isPublic'] ?? false,
     );
   }
 
@@ -63,6 +68,7 @@ class LogModel {
     String? teamId,
     String? category,
     bool? isSynced,
+    bool? isPublic,
   }) {
     return LogModel(
       id: id ?? this.id,
@@ -73,6 +79,7 @@ class LogModel {
       teamId: teamId ?? this.teamId,
       category: category ?? this.category,
       isSynced: isSynced ?? this.isSynced,
+      isPublic: isPublic ?? this.isPublic,
     );
   }
 
@@ -86,6 +93,7 @@ class LogModel {
       'category': category,
       'teamId': teamId,
       'authorId': authorId,
+      'isPublic': isPublic,
     };
   }
 }

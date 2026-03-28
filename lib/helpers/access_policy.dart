@@ -1,20 +1,16 @@
 class AccessPolicy {
   // Template ini mudah dikembangkan: tinggal tambah baris 'case' baru
   static bool canPerform(String role, String action, {bool isOwner = false}) {
-    switch (role) {
-      case 'Ketua':
-        return true; // Ketua bisa semua (Full CRUD)
-      case 'Anggota':
-        // Anggota bisa Create dan Read; Update/Delete hanya milik sendiri.
-        if (['create', 'read'].contains(action)) {
-          return true;
-        }
-        if (['update', 'delete'].contains(action)) {
-          return isOwner;
-        }
-        return false;
-      default:
-        return false;
+    // Sovereignty rule: edit/hapus mutlak milik owner, terlepas dari role.
+    if (['update', 'delete'].contains(action)) {
+      return isOwner;
     }
+
+    // Create/Read tetap diizinkan untuk role tim yang valid.
+    if (['create', 'read'].contains(action)) {
+      return role == 'Ketua' || role == 'Anggota';
+    }
+
+    return false;
   }
 }

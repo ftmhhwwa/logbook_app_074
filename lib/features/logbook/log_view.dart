@@ -377,6 +377,7 @@ class _LogViewState extends State<LogView> {
                                       date: '',
                                       authorId: widget.currentUserId,
                                       teamId: widget.userTeamId,
+                                      isPublic: false,
                                     ),
                                   ),
                                   icon: const Icon(Icons.add_rounded),
@@ -515,6 +516,27 @@ class _LogViewState extends State<LogView> {
                                                     fontWeight: FontWeight.w700,
                                                   ),
                                                 ),
+                                              ),
+                                              Icon(
+                                                log.isPublic
+                                                    ? Icons.public_rounded
+                                                    : Icons.lock_rounded,
+                                                size: 15,
+                                                color: log.isPublic
+                                                    ? Colors.blueGrey
+                                                    : colorScheme.primary,
+                                              ),
+                                              Text(
+                                                log.isPublic
+                                                    ? 'Public'
+                                                    : 'Private',
+                                                style: theme.textTheme.bodySmall
+                                                    ?.copyWith(
+                                                      color: colorScheme
+                                                          .onSurfaceVariant,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                               ),
                                               Text(
                                                 _formatLogTimestamp(log.date),
@@ -691,6 +713,7 @@ class _LogViewState extends State<LogView> {
             date: '',
             authorId: widget.currentUserId,
             teamId: widget.userTeamId,
+            isPublic: false,
           ),
         ),
         backgroundColor: colorScheme.primary,

@@ -20,10 +20,7 @@ class MongoService {
     required String currentUserRole,
     required String currentUserTeamId,
   }) {
-    final hasAccess =
-        log.authorId == currentUserId ||
-        log.teamId == currentUserTeamId ||
-        currentUserRole == 'Ketua';
+    final hasAccess = log.authorId == currentUserId;
 
     if (!hasAccess) {
       throw Exception("Security Breach: Anda tidak memiliki akses!");
@@ -76,7 +73,10 @@ class MongoService {
   }
 
   /// READ: Mengambil data dari Cloud
-  Future<List<LogModel>> getLogs(String teamId) async {
+  Future<List<LogModel>> getLogs(
+    String teamId, {
+    required String currentUserId,
+  }) async {
     try {
       final collection = await _getSafeCollection(); // Gunakan jalur aman
 
@@ -86,9 +86,12 @@ class MongoService {
         level: 3,
       );
 
-      final List<Map<String, dynamic>> data = await collection
-          .find(where.eq('teamId', teamId))
-          .toList();
+      final List<Map<String, dynamic>> data = await collection.find({
+        r'$or': [
+          {'authorId': currentUserId},
+          {'teamId': teamId, 'isPublic': true},
+        ],
+      }).toList();
       return data.map((json) => LogModel.fromMap(json)).toList();
     } catch (e) {
       await LogHelper.writeLog(

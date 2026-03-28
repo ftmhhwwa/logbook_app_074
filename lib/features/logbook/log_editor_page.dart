@@ -36,6 +36,7 @@ class _LogEditorPageState extends State<LogEditorPage> {
     'Urgent',
   ];
   late String _selectedCategory;
+  late bool _isPublic;
 
   bool get _isAddMode => widget.log.id == null || widget.log.id!.isEmpty;
 
@@ -47,6 +48,7 @@ class _LogEditorPageState extends State<LogEditorPage> {
     _selectedCategory = _categories.contains(widget.log.category)
         ? widget.log.category
         : _categories.first;
+    _isPublic = widget.log.isPublic;
 
     _descController.addListener(() {
       setState(() {});
@@ -95,6 +97,7 @@ class _LogEditorPageState extends State<LogEditorPage> {
           _descController.text.trim(),
           widget.currentUserId,
           widget.currentUserTeamId,
+          _isPublic,
         );
       } else {
         if (widget.index == null) {
@@ -106,6 +109,7 @@ class _LogEditorPageState extends State<LogEditorPage> {
           _titleController.text.trim(),
           _descController.text.trim(),
           _selectedCategory,
+          _isPublic,
         );
       }
 
@@ -154,7 +158,7 @@ class _LogEditorPageState extends State<LogEditorPage> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    value: _selectedCategory,
+                    initialValue: _selectedCategory,
                     decoration: const InputDecoration(labelText: 'Kategori'),
                     items: _categories
                         .map(
@@ -168,6 +172,22 @@ class _LogEditorPageState extends State<LogEditorPage> {
                       if (value == null) return;
                       setState(() {
                         _selectedCategory = value;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  SwitchListTile.adaptive(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Visibilitas Publik'),
+                    subtitle: Text(
+                      _isPublic
+                          ? 'Public: terlihat oleh anggota tim & ketua'
+                          : 'Private: hanya Anda yang bisa melihat',
+                    ),
+                    value: _isPublic,
+                    onChanged: (value) {
+                      setState(() {
+                        _isPublic = value;
                       });
                     },
                   ),

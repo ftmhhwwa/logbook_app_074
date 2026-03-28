@@ -68,11 +68,38 @@ class LogController {
     return canEdit;
   }
 
+  bool _canView(LogModel log) {
+    if (log.authorId == currentUserId) {
+      return true;
+    }
+    return log.isPublic && log.teamId == userTeamId;
+  }
+
+  int _findHiveIndexFor(LogModel target) {
+    for (int i = 0; i < _myBox.length; i++) {
+      final item = _myBox.getAt(i);
+      if (item == null) continue;
+      if (item.id != null && item.id == target.id) {
+        return i;
+      }
+    }
+
+    for (int i = 0; i < _myBox.length; i++) {
+      final item = _myBox.getAt(i);
+      if (item == null) continue;
+      final sameTitle = item.title == target.title;
+      final sameDate = item.date == target.date;
+      final sameAuthor = item.authorId == target.authorId;
+      if (sameTitle && sameDate && sameAuthor) {
+        return i;
+      }
+    }
+
+    return -1;
+  }
+
   void _assertLogAccess(LogModel log) {
-    final hasAccess =
-        log.authorId == currentUserId ||
-        log.teamId == userTeamId ||
-        userRole == 'Ketua';
+    final hasAccess = _canView(log);
 
     if (!hasAccess) {
       throw Exception("Security Breach: Anda tidak memiliki akses!");
@@ -82,11 +109,14 @@ class LogController {
   /// 1. LOAD DATA (Offline-First Strategy)
   Future<void> loadLogs(String teamId) async {
     // Langkah 1: Ambil data dari Hive (Sangat Cepat/Instan)
-    logsNotifier.value = _myBox.values.toList();
+    logsNotifier.value = _myBox.values.where(_canView).toList();
 
     // Langkah 2: Sync dari Cloud (Background)
     try {
-      final cloudData = await MongoService().getLogs(teamId);
+      final cloudData = await MongoService().getLogs(
+        teamId,
+        currentUserId: currentUserId,
+      );
       final pendingLocal = _myBox.values.where((log) => !log.isSynced).toList();
 
       // Jika cloud kosong saat cache lokal tersedia, pertahankan cache lokal.
@@ -117,7 +147,7 @@ class LogController {
       await _myBox.addAll(mergedList);
 
       // Update UI dengan data Cloud
-      logsNotifier.value = mergedList;
+      logsNotifier.value = mergedList.where(_canView).toList();
 
       await LogHelper.writeLog(
         "SYNC: Data berhasil diperbarui dari Atlas",
@@ -139,6 +169,7 @@ class LogController {
     String desc,
     String authorId,
     String teamId,
+    bool isPublic,
   ) async {
     if (!AccessPolicy.canPerform(userRole, 'create')) {
       await LogHelper.writeLog(
@@ -157,6 +188,7 @@ class LogController {
       authorId: authorId,
       teamId: teamId,
       isSynced: false,
+      isPublic: isPublic,
     );
 
     // ACTION 1: Simpan ke Hive (Instan)
@@ -231,6 +263,7 @@ class LogController {
     String newTitle,
     String newDesc,
     String newCategory,
+    bool newIsPublic,
   ) async {
     final currentLogs = List<LogModel>.from(logsNotifier.value);
     final oldLog = currentLogs[index];
@@ -252,12 +285,18 @@ class LogController {
       date: DateTime.now().toString(),
       teamId: oldLog.teamId,
       authorId: oldLog.authorId,
+      isSynced: false,
+      isPublic: newIsPublic,
     );
 
     // Simpan lokal dulu agar UI tetap instan saat offline.
     currentLogs[index] = updatedLog;
     logsNotifier.value = currentLogs;
-    await _myBox.putAt(index, updatedLog);
+    final hiveIndex = _findHiveIndexFor(oldLog);
+    if (hiveIndex == -1) {
+      throw Exception('Data lokal tidak ditemukan untuk update.');
+    }
+    await _myBox.putAt(hiveIndex, updatedLog);
 
     try {
       // 1. Jalankan update di MongoService (Tunggu konfirmasi Cloud)
@@ -312,7 +351,11 @@ class LogController {
       // Hapus lokal dulu agar UI tetap instan saat offline.
       currentLogs.removeAt(index);
       logsNotifier.value = currentLogs;
-      await _myBox.deleteAt(index);
+      final hiveIndex = _findHiveIndexFor(targetLog);
+      if (hiveIndex == -1) {
+        throw Exception('Data lokal tidak ditemukan untuk hapus.');
+      }
+      await _myBox.deleteAt(hiveIndex);
 
       // 1. Hapus data di MongoDB Atlas (Tunggu konfirmasi Cloud)
       await MongoService().deleteLog(
