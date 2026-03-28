@@ -14,6 +14,33 @@ class MongoService {
   factory MongoService() => _instance;
   MongoService._internal();
 
+  static bool isLogVisibleToUser(
+    LogModel log, {
+    required String currentUserId,
+    required String currentUserTeamId,
+  }) {
+    if (log.authorId == currentUserId) {
+      return true;
+    }
+    return log.isPublic && log.teamId == currentUserTeamId;
+  }
+
+  static List<LogModel> filterVisibleLogsForUser(
+    List<LogModel> logs, {
+    required String currentUserId,
+    required String currentUserTeamId,
+  }) {
+    return logs
+        .where(
+          (log) => isLogVisibleToUser(
+            log,
+            currentUserId: currentUserId,
+            currentUserTeamId: currentUserTeamId,
+          ),
+        )
+        .toList();
+  }
+
   void _assertLogAccess(
     LogModel log, {
     required String currentUserId,
@@ -92,7 +119,13 @@ class MongoService {
           {'teamId': teamId, 'isPublic': true},
         ],
       }).toList();
-      return data.map((json) => LogModel.fromMap(json)).toList();
+      final logs = data.map((json) => LogModel.fromMap(json)).toList();
+      // Defense-in-depth agar log private tidak pernah bocor meski query berubah.
+      return filterVisibleLogsForUser(
+        logs,
+        currentUserId: currentUserId,
+        currentUserTeamId: teamId,
+      );
     } catch (e) {
       await LogHelper.writeLog(
         "ERROR: Fetch Failed - $e",
