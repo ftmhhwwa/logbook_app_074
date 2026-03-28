@@ -517,34 +517,31 @@ class _LogViewState extends State<LogView> {
                                     ),
                                     Column(
                                       children: [
-                                        IconButton(
-                                          visualDensity: VisualDensity.compact,
-                                          icon: Icon(
-                                            Icons.edit_rounded,
-                                            color: canUpdate
-                                                ? colorScheme.primary
-                                                : colorScheme.outline,
-                                          ),
-                                          onPressed: canUpdate
-                                              ? () {
-                                                  final originalIndex =
-                                                      currentLogs.indexWhere(
-                                                        (item) =>
-                                                            item.id == log.id &&
-                                                            item.title ==
-                                                                log.title &&
-                                                            item.date ==
-                                                                log.date,
-                                                      );
-                                                  _goToEditor(
-                                                    log: log,
-                                                    index: originalIndex == -1
-                                                        ? null
-                                                        : originalIndex,
+                                        if (canUpdate)
+                                          IconButton(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            icon: Icon(
+                                              Icons.edit_rounded,
+                                              color: colorScheme.primary,
+                                            ),
+                                            onPressed: () {
+                                              final originalIndex = currentLogs
+                                                  .indexWhere(
+                                                    (item) =>
+                                                        item.id == log.id &&
+                                                        item.title ==
+                                                            log.title &&
+                                                        item.date == log.date,
                                                   );
-                                                }
-                                              : null,
-                                        ),
+                                              _goToEditor(
+                                                log: log,
+                                                index: originalIndex == -1
+                                                    ? null
+                                                    : originalIndex,
+                                              );
+                                            },
+                                          ),
                                         if (canDelete)
                                           IconButton(
                                             visualDensity:
