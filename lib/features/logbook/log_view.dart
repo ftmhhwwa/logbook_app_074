@@ -54,13 +54,22 @@ class _LogViewState extends State<LogView> {
     final connectivityResult = await Connectivity().checkConnectivity();
     if (!mounted) return;
 
+    final initialOffline = _isConnectivityOffline(connectivityResult);
+
     setState(() {
-      _isOffline = _isConnectivityOffline(connectivityResult);
+      _isOffline = initialOffline;
     });
 
+    // Jika app dibuka saat online, langsung coba sinkronkan data pending.
+    if (!initialOffline) {
+      await _controller.syncPendingLogs();
+      _refreshLogs();
+    }
+
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
-      dynamic result,
+      List<ConnectivityResult> result,
     ) {
+      final wasOffline = _isOffline;
       final isOfflineNow = _isConnectivityOffline(result);
       if (!mounted) return;
       if (_isOffline == isOfflineNow) return;
@@ -68,19 +77,24 @@ class _LogViewState extends State<LogView> {
       setState(() {
         _isOffline = isOfflineNow;
       });
+
+      // Saat koneksi kembali online, sinkronkan data pending ke cloud.
+      if (wasOffline && !isOfflineNow) {
+        _controller.syncPendingLogs().then((_) {
+          if (!mounted) return;
+          _refreshLogs();
+        });
+      }
     });
   }
 
-  bool _isConnectivityOffline(dynamic connectivityResult) {
-    if (connectivityResult is ConnectivityResult) {
-      return connectivityResult == ConnectivityResult.none;
+  bool _isConnectivityOffline(List<ConnectivityResult> connectivityResults) {
+    if (connectivityResults.isEmpty) {
+      return true;
     }
-
-    if (connectivityResult is List<ConnectivityResult>) {
-      return connectivityResult.contains(ConnectivityResult.none);
-    }
-
-    return false;
+    return connectivityResults.every(
+      (result) => result == ConnectivityResult.none,
+    );
   }
 
   void _refreshLogs() {
@@ -509,6 +523,16 @@ class _LogViewState extends State<LogView> {
                                                       color: colorScheme
                                                           .onSurfaceVariant,
                                                     ),
+                                              ),
+                                              Icon(
+                                                log.isSynced
+                                                    ? Icons.cloud_done_rounded
+                                                    : Icons
+                                                          .cloud_upload_rounded,
+                                                size: 16,
+                                                color: log.isSynced
+                                                    ? Colors.green
+                                                    : Colors.orange,
                                               ),
                                             ],
                                           ),

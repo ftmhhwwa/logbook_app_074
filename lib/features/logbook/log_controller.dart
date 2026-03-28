@@ -1,4 +1,5 @@
 import 'dart:convert'; // Wajib ditambahkan untuk jsonEncode & jsonDecode
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart' as hive;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,6 +35,30 @@ class LogController {
 
   hive.Box<LogModel> get _myBox => hiveBox;
 
+  bool _isDuplicateKeyError(Object e) {
+    final message = e.toString().toLowerCase();
+    return message.contains('e11000') || message.contains('duplicate key');
+  }
+
+  Future<void> _markSyncedAt(int index, LogModel log) async {
+    final syncedLog = log.copyWith(isSynced: true);
+    await _myBox.putAt(index, syncedLog);
+
+    final updatedLogs = List<LogModel>.from(logsNotifier.value);
+    if (index >= 0 && index < updatedLogs.length) {
+      updatedLogs[index] = syncedLog;
+      logsNotifier.value = updatedLogs;
+    }
+  }
+
+  Future<bool> _hasNetworkConnection() async {
+    final results = await Connectivity().checkConnectivity();
+    if (results.isEmpty) {
+      return false;
+    }
+    return results.any((result) => result != ConnectivityResult.none);
+  }
+
   bool _canEdit(LogModel log) {
     bool canEdit = AccessPolicy.canPerform(
       userRole,
@@ -62,6 +87,7 @@ class LogController {
     // Langkah 2: Sync dari Cloud (Background)
     try {
       final cloudData = await MongoService().getLogs(teamId);
+      final pendingLocal = _myBox.values.where((log) => !log.isSynced).toList();
 
       // Jika cloud kosong saat cache lokal tersedia, pertahankan cache lokal.
       if (cloudData.isEmpty && _myBox.isNotEmpty) {
@@ -73,12 +99,25 @@ class LogController {
         return;
       }
 
+      // Pastikan data lokal yang belum tersinkron tidak hilang saat refresh cloud.
+      final mergedById = <String, LogModel>{
+        for (final log in cloudData)
+          if ((log.id ?? '').isNotEmpty) log.id!: log,
+      };
+      final mergedList = <LogModel>[...cloudData];
+      for (final local in pendingLocal) {
+        final localId = local.id ?? '';
+        if (localId.isEmpty || !mergedById.containsKey(localId)) {
+          mergedList.add(local);
+        }
+      }
+
       // Update Hive dengan data terbaru dari Cloud agar sinkron
       await _myBox.clear();
-      await _myBox.addAll(cloudData);
+      await _myBox.addAll(mergedList);
 
       // Update UI dengan data Cloud
-      logsNotifier.value = cloudData;
+      logsNotifier.value = mergedList;
 
       await LogHelper.writeLog(
         "SYNC: Data berhasil diperbarui dari Atlas",
@@ -117,15 +156,24 @@ class LogController {
       date: DateTime.now().toString(),
       authorId: authorId,
       teamId: teamId,
+      isSynced: false,
     );
 
     // ACTION 1: Simpan ke Hive (Instan)
     await _myBox.add(newLog);
     logsNotifier.value = [...logsNotifier.value, newLog];
 
+    final localIndex = _myBox.length - 1;
+
     // ACTION 2: Kirim ke MongoDB Atlas (Background)
     try {
+      if (!await _hasNetworkConnection()) {
+        throw Exception('No internet connection');
+      }
+
       await MongoService().insertLog(newLog);
+      await _markSyncedAt(localIndex, newLog);
+
       await LogHelper.writeLog(
         "SUCCESS: Data tersinkron ke Cloud",
         source: "log_controller.dart",
@@ -136,6 +184,30 @@ class LogController {
         source: "log_controller.dart",
         level: 1,
       );
+    }
+  }
+
+  Future<void> syncPendingLogs() async {
+    if (!await _hasNetworkConnection()) {
+      return;
+    }
+
+    for (int i = 0; i < _myBox.length; i++) {
+      final log = _myBox.getAt(i);
+      if (log == null || log.isSynced) {
+        continue;
+      }
+
+      try {
+        await MongoService().insertLog(log);
+        await _markSyncedAt(i, log);
+      } catch (e) {
+        // Duplicate key berarti data sebenarnya sudah ada di cloud.
+        if (_isDuplicateKeyError(e)) {
+          await _markSyncedAt(i, log);
+          continue;
+        }
+      }
     }
   }
 

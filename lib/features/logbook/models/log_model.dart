@@ -26,6 +26,9 @@ class LogModel {
   @HiveField(6)
   final String category;
 
+  @HiveField(7, defaultValue: false)
+  final bool isSynced;
+
   LogModel({
     this.id,
     required this.title,
@@ -34,6 +37,7 @@ class LogModel {
     this.category = 'Pribadi',
     required this.teamId,
     required this.authorId,
+    this.isSynced = false,
   });
 
   // Untuk Tugas HOTS: Konversi Map (JSON) ke Object
@@ -46,6 +50,29 @@ class LogModel {
       category: map['category'] ?? 'Pribadi',
       teamId: map['teamId'] ?? 'no_team',
       authorId: map['authorId'] ?? 'unknown_user',
+      isSynced: true,
+    );
+  }
+
+  LogModel copyWith({
+    String? id,
+    String? title,
+    String? date,
+    String? description,
+    String? authorId,
+    String? teamId,
+    String? category,
+    bool? isSynced,
+  }) {
+    return LogModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      date: date ?? this.date,
+      description: description ?? this.description,
+      authorId: authorId ?? this.authorId,
+      teamId: teamId ?? this.teamId,
+      category: category ?? this.category,
+      isSynced: isSynced ?? this.isSynced,
     );
   }
 

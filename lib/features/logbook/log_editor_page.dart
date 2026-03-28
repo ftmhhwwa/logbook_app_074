@@ -188,7 +188,10 @@ class _LogEditorPageState extends State<LogEditorPage> {
               ),
             ),
             // Tab 2: Markdown Preview
-            Markdown(data: _descController.text),
+            SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: MarkdownBody(data: _descController.text),
+            ),
           ],
         ),
       ),
