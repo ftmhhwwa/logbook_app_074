@@ -170,6 +170,7 @@ class LogController {
     String authorId,
     String teamId,
     bool isPublic,
+    String technicalCategory,
   ) async {
     if (!AccessPolicy.canPerform(userRole, 'create')) {
       await LogHelper.writeLog(
@@ -189,6 +190,7 @@ class LogController {
       teamId: teamId,
       isSynced: false,
       isPublic: isPublic,
+      technicalCategory: technicalCategory,
     );
 
     // ACTION 1: Simpan ke Hive (Instan)
@@ -264,6 +266,7 @@ class LogController {
     String newDesc,
     String newCategory,
     bool newIsPublic,
+    String newTechnicalCategory,
   ) async {
     final currentLogs = List<LogModel>.from(logsNotifier.value);
     final oldLog = currentLogs[index];
@@ -287,6 +290,7 @@ class LogController {
       authorId: oldLog.authorId,
       isSynced: false,
       isPublic: newIsPublic,
+      technicalCategory: newTechnicalCategory,
     );
 
     // Simpan lokal dulu agar UI tetap instan saat offline.

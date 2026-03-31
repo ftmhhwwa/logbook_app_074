@@ -32,6 +32,9 @@ class LogModel {
   @HiveField(8, defaultValue: false)
   final bool isPublic;
 
+  @HiveField(9, defaultValue: 'Mechanical')
+  final String technicalCategory;
+
   LogModel({
     this.id,
     required this.title,
@@ -42,6 +45,7 @@ class LogModel {
     required this.authorId,
     this.isSynced = false,
     this.isPublic = false,
+    this.technicalCategory = 'Mechanical',
   });
 
   // Untuk Tugas HOTS: Konversi Map (JSON) ke Object
@@ -56,6 +60,7 @@ class LogModel {
       authorId: map['authorId'] ?? 'unknown_user',
       isSynced: true,
       isPublic: map['isPublic'] ?? false,
+      technicalCategory: map['technicalCategory'] ?? 'Mechanical',
     );
   }
 
@@ -69,6 +74,7 @@ class LogModel {
     String? category,
     bool? isSynced,
     bool? isPublic,
+    String? technicalCategory,
   }) {
     return LogModel(
       id: id ?? this.id,
@@ -80,6 +86,7 @@ class LogModel {
       category: category ?? this.category,
       isSynced: isSynced ?? this.isSynced,
       isPublic: isPublic ?? this.isPublic,
+      technicalCategory: technicalCategory ?? this.technicalCategory,
     );
   }
 
@@ -94,6 +101,7 @@ class LogModel {
       'teamId': teamId,
       'authorId': authorId,
       'isPublic': isPublic,
+      'technicalCategory': technicalCategory,
     };
   }
 }
