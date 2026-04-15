@@ -4,10 +4,20 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:logbook_app_001/features/logbook/models/log_model.dart';
 //import 'package:logbook_app_001/features/logbook/counter_view.dart';
 import 'package:logbook_app_001/features/onboarding/onboarding_view.dart';
+import 'package:camera/camera.dart';
+
+List<CameraDescription> cameras = []; // Variabel global untuk menyimpan daftar kamera
 
 void main() async {
   // Wajib untuk operasi asinkron sebelum runApp
   WidgetsFlutterBinding.ensureInitialized();
+
+   try {
+    // Ambil daftar kamera yang tersedia di perangkat
+    cameras = await availableCameras();
+  } on CameraException catch (e) {
+    print('Error: ${e.code}\nError Message: ${e.description}');
+  }
 
   // Load ENV
   await dotenv.load(fileName: ".env");
