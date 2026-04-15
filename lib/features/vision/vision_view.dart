@@ -152,36 +152,29 @@ class _VisionViewState extends State<VisionView> {
   /// - Layer 2: CustomPaint for digital overlay
   Widget _buildVisionStack() {
     final cameraController = _visionController.controller!;
+    final previewSize = cameraController.value.previewSize;
+
+    if (previewSize == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
     return Stack(
       fit: StackFit.expand,
       children: [
         // LAYER 1: Hardware Preview
-        // Use cover-scaling to fill screen while preserving camera ratio.
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final screenAspectRatio =
-                constraints.maxWidth / constraints.maxHeight;
-            final cameraAspectRatio = cameraController.value.aspectRatio;
-
-            // Camera plugin reports width/height in sensor orientation.
-            // In portrait we need to scale so preview covers full screen.
-            final rawScale = cameraAspectRatio / screenAspectRatio;
-            final scale = rawScale < 1 ? 1 / rawScale : rawScale;
-
-            return ClipRect(
-              child: Transform.scale(
-                scale: scale,
-                alignment: Alignment.center,
-                child: Center(
-                  child: AspectRatio(
-                    aspectRatio: cameraAspectRatio,
-                    child: CameraPreview(cameraController),
-                  ),
-                ),
+        // Use cover scaling with native preview size to avoid portrait distortion.
+        Positioned.fill(
+          child: ClipRect(
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                // previewSize is landscape-oriented on most Android devices.
+                width: previewSize.height,
+                height: previewSize.width,
+                child: CameraPreview(cameraController),
               ),
-            );
-          },
+            ),
+          ),
         ),
 
         // LAYER 2: Digital Overlay (Canvas)

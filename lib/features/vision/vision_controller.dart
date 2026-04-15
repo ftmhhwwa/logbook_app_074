@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// VisionController manages the camera lifecycle and detection logic
 /// for the Smart Patrol System.
@@ -55,6 +56,10 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       );
 
       await controller!.initialize();
+
+      // Keep camera orientation consistent in portrait mode.
+      await controller!.lockCaptureOrientation(DeviceOrientation.portraitUp);
+
       isInitialized = true;
       errorMessage = null;
     } catch (e) {

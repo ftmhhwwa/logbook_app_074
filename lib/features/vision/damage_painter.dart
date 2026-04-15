@@ -108,8 +108,40 @@ class DamagePainter extends CustomPainter {
     // Redraw box on top of shadow
     canvas.drawRect(box, paint);
 
+    // Draw simple crosshair in the center of detection box
+    _drawSimpleCrosshair(canvas, box, boxColor);
+
     // Draw label
     _drawLabel(canvas, box, result.label, result.score);
+  }
+
+  /// Draw a minimal crosshair at the center of a detection box.
+  void _drawSimpleCrosshair(Canvas canvas, Rect box, Color color) {
+    final center = box.center;
+    final lineLength = box.shortestSide * 0.12;
+
+    final crosshairPaint = Paint()
+      ..color = color.withOpacity(0.95)
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawLine(
+      Offset(center.dx - lineLength, center.dy),
+      Offset(center.dx + lineLength, center.dy),
+      crosshairPaint,
+    );
+
+    canvas.drawLine(
+      Offset(center.dx, center.dy - lineLength),
+      Offset(center.dx, center.dy + lineLength),
+      crosshairPaint,
+    );
+
+    canvas.drawCircle(
+      center,
+      2.5,
+      Paint()..color = color,
+    );
   }
 
   /// Draw detection label above bounding box
