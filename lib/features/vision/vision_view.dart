@@ -113,37 +113,192 @@ class _VisionViewState extends State<VisionView> {
     );
   }
 
-  /// Build loading state with informative message
-  /// Phase 6 UX Enhancement
+  /// Build loading state with informative message and permission handling
+  /// Phase 6 UX Enhancement - improved with better error messaging
   Widget _buildLoadingState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          const Text(
-            "Menghubungkan ke Sensor Visual...",
-            style: TextStyle(fontSize: 16),
+    final errorMsg = _visionController.errorMessage;
+    final isPermissionDenied = errorMsg?.toLowerCase().contains('permission') ?? false;
+    final isCameraAccessDenied = errorMsg?.toLowerCase().contains('no camera') ?? false;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Smart-Patrol Vision"),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Error state: Camera or permission denied
+              if (isPermissionDenied || isCameraAccessDenied) ...[
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade200, width: 2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.block,
+                        size: 64,
+                        color: Colors.red.shade700,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        isPermissionDenied
+                            ? "Camera Permission Denied"
+                            : "No Camera Access",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade900,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        isPermissionDenied
+                            ? "This app needs camera permission to detect road damage. Please grant permission in Settings."
+                            : "No camera device found on this device. Please ensure your device has a working camera.",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.red.shade700,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (errorMsg != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            "Error: $errorMsg",
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.red.shade600,
+                              fontFamily: 'monospace',
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () => openAppSettings(),
+                        icon: const Icon(Icons.settings),
+                        label: const Text("Open Settings"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () => _visionController.initCamera(),
+                        child: const Text("Retry"),
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                // Loading state: Initializing camera
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Animated background circle
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.blue.shade50,
+                        border: Border.all(
+                          color: Colors.blue.shade200,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    // Circular progress indicator
+                    const CircularProgressIndicator(
+                      strokeWidth: 4,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                Text(
+                  "Menghubungkan ke Sensor Visual...",
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Mohon tunggu sampai kamera siap",
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Colors.grey.shade600,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                // Steps indicator
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildStepIndicator(1, "Request"),
+                    const SizedBox(width: 12),
+                    _buildStepIndicator(2, "Init"),
+                    const SizedBox(width: 12),
+                    _buildStepIndicator(3, "Ready"),
+                  ],
+                ),
+              ],
+            ],
           ),
-          if (_visionController.errorMessage != null) ...[
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Text(
-                _visionController.errorMessage!,
-                style: const TextStyle(color: Colors.red),
-                textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+
+  /// Build a step indicator widget for loading sequence
+  Widget _buildStepIndicator(int step, String label) {
+    return Column(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.blue.shade100,
+            border: Border.all(color: Colors.blue.shade400, width: 2),
+          ),
+          child: Center(
+            child: Text(
+              step.toString(),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.blue,
               ),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => openAppSettings(),
-              child: const Text("Open Settings"),
-            ),
-          ],
-        ],
-      ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12),
+        ),
+      ],
     );
   }
 
