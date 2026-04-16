@@ -49,7 +49,7 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       // Select Rear Camera (Index 0)
       controller = CameraController(
         cameras[0],
-        ResolutionPreset.high, // Use high resolution for better photo quality
+        ResolutionPreset.ultraHigh, // Use high resolution for better photo quality
         enableAudio: false, // We only need visual for road damage detection
         imageFormatGroup:
             ImageFormatGroup.jpeg, // Use JPEG format for better compatibility
@@ -125,17 +125,43 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
   /// Toggle flashlight (torch) on/off
   /// UX Enhancement from Phase 6
   Future<void> toggleFlashlight() async {
-    if (controller == null || !controller!.value.isInitialized) return;
+    if (controller == null || !controller!.value.isInitialized) {
+      errorMessage = "Camera not initialized for flashlight toggle";
+      notifyListeners();
+      return;
+    }
 
-    isFlashlightOn = !isFlashlightOn;
+    final nextState = !isFlashlightOn;
 
     try {
-      await controller!.setFlashMode(
-        isFlashlightOn ? FlashMode.always : FlashMode.off,
-      );
+      // Use torch mode for continuous light (better compatibility than 'always')
+      // Fallback to 'always' if torch not available on device
+      final flashMode = nextState ? FlashMode.torch : FlashMode.off;
+      
+      await controller!.setFlashMode(flashMode);
+      isFlashlightOn = nextState;
+      errorMessage = null; // Clear error on success
     } catch (e) {
-      errorMessage = "Failed to toggle flashlight: $e";
-      notifyListeners();
+      // Try fallback: use 'always' mode
+      if (nextState) {
+        try {
+          await controller!.setFlashMode(FlashMode.always);
+          isFlashlightOn = true;
+          errorMessage = null;
+        } catch (fallbackError) {
+          errorMessage = "Flashlight not supported on this device: $fallbackError";
+          isFlashlightOn = false;
+        }
+      } else {
+        // Turning off should always work
+        try {
+          await controller!.setFlashMode(FlashMode.off);
+          isFlashlightOn = false;
+          errorMessage = null;
+        } catch (turnOffError) {
+          errorMessage = "Failed to turn off flashlight: $turnOffError";
+        }
+      }
     }
 
     notifyListeners();

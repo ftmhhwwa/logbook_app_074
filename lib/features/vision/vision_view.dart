@@ -46,33 +46,35 @@ class _VisionViewState extends State<VisionView> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Smart-Patrol Vision"),
-        actions: [
-          // Flashlight toggle (Phase 6 UX Enhancement)
-          IconButton(
-            icon: Icon(
-              _visionController.isFlashlightOn
-                  ? Icons.flash_on
-                  : Icons.flash_off,
+    return ListenableBuilder(
+      listenable: _visionController,
+      builder: (context, child) => Scaffold(
+        appBar: AppBar(
+          title: const Text("Smart-Patrol Vision"),
+          actions: [
+            // Flashlight toggle (Phase 6 UX Enhancement) - now reactive
+            IconButton(
+              icon: Icon(
+                _visionController.isFlashlightOn
+                    ? Icons.flash_on
+                    : Icons.flash_off,
+              ),
+              onPressed: _visionController.toggleFlashlight,
+              tooltip: 'Toggle Flashlight',
             ),
-            onPressed: _visionController.toggleFlashlight,
-            tooltip: 'Toggle Flashlight',
-          ),
-          // Overlay visibility toggle (Phase 6 UX Enhancement)
-          IconButton(
-            icon: Icon(
-              _visionController.isOverlayVisible
-                  ? Icons.visibility
-                  : Icons.visibility_off,
+            // Overlay visibility toggle (Phase 6 UX Enhancement) - now reactive
+            IconButton(
+              icon: Icon(
+                _visionController.isOverlayVisible
+                    ? Icons.visibility
+                    : Icons.visibility_off,
+              ),
+              onPressed: _visionController.toggleOverlay,
+              tooltip: 'Toggle Overlay',
             ),
-            onPressed: _visionController.toggleOverlay,
-            tooltip: 'Toggle Overlay',
-          ),
-        ],
-      ),
-      body: ListenableBuilder(
+          ],
+        ),
+        body: ListenableBuilder(
         listenable: _visionController,
         builder: (context, child) {
           // Show loading if camera is initializing
@@ -84,28 +86,29 @@ class _VisionViewState extends State<VisionView> {
           return _buildVisionStack();
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final image = await _visionController.takePhoto();
-          if (image != null && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Photo saved: ${image.path}'),
-                duration: const Duration(seconds: 3),
-                action: SnackBarAction(
-                  label: 'View',
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    // You can add code here to open the image
-                    // For now, just showing the path
-                  },
+        floatingActionButton: FloatingActionButton(
+          onPressed: () async {
+            final image = await _visionController.takePhoto();
+            if (image != null && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Photo saved: ${image.path}'),
+                  duration: const Duration(seconds: 3),
+                  action: SnackBarAction(
+                    label: 'View',
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                      // You can add code here to open the image
+                      // For now, just showing the path
+                    },
+                  ),
                 ),
-              ),
-            );
-          }
-        },
-        tooltip: 'Capture Photo',
-        child: const Icon(Icons.camera),
+              );
+            }
+          },
+          tooltip: 'Capture Photo',
+          child: const Icon(Icons.camera),
+        ),
       ),
     );
   }

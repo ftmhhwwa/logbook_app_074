@@ -67,7 +67,7 @@ class DamagePainter extends CustomPainter {
     // Draw label
     _drawLabel(
       canvas,
-      Rect.fromCircle(center: Offset(centerX, centerY), radius: 30),
+      Rect.fromCircle(center: Offset(centerX - 70, centerY - 50), radius: 30),
       "Searching for Road Damage...",
       1.0,
     );
