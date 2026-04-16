@@ -14,7 +14,6 @@ import 'package:logbook_app_001/helpers/access_policy.dart';
 import 'package:logbook_app_001/services/mongo_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:logbook_app_001/features/vision/vision_view.dart';
-import 'package:logbook_app_001/features/vision/vision_controller.dart';
 
 class LogView extends StatefulWidget {
   final String username;
@@ -463,23 +462,16 @@ class _LogViewState extends State<LogView> {
         backgroundColor: const Color(0xFF4E342E),
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            onPressed: null,
-            icon: Icon(
-              _isOffline ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
-            ),
-            tooltip: _isOffline ? 'Offline' : 'Online',
-          ),
-          IconButton(
-            onPressed: _handleLogout,
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-          ),
           IconButton(onPressed: () => Navigator.push(
             context, 
             MaterialPageRoute(builder: (context) => const VisionView())
             ), 
-            icon: const Icon(Icons.camera_alt_rounded))
+            icon: const Icon(Icons.camera_alt_rounded)),
+          IconButton(
+            onPressed: _handleLogout,
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Logout'
+          ),          
         ],
       ),
       body: Container(
@@ -530,6 +522,23 @@ class _LogViewState extends State<LogView> {
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
+                          ),
+                          Row(
+                            children: [
+                              Icon(
+                                _isOffline ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
+                                size: 16,
+                                color: _isOffline ? Colors.orange : Colors.green,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _isOffline ? 'Offline' : 'Online',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: _isOffline ? Colors.orange : Colors.green,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

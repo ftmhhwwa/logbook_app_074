@@ -16,7 +16,11 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
   // Camera controller instance
   CameraController? controller;
 
-  // State tracking
+  // ============ RESOURCE MANAGEMENT ============
+  /// Tracks if controller has been disposed to prevent use-after-free
+  bool _disposed = false;
+
+  // ============ STATE TRACKING ============
   bool isInitialized = false;
   String? errorMessage;
 
@@ -28,28 +32,44 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
   bool isFlashlightOn = false;
   bool isOverlayVisible = true;
 
+  String? lastFlashMessage; // Track flash toggle feedback for UX
+
+  /// Getter for resource state (for lifecycle debugging)
+  bool get isDisposed => _disposed;
+
+  void _notifySafely() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
   VisionController() {
     // Register observer to monitor app lifecycle status
     WidgetsBinding.instance.addObserver(this);
     initCamera();
   }
 
-  /// Initialize the rear camera with medium resolution
-  /// ResolutionPreset.medium balances AI accuracy with performance
+  /// Initialize the rear camera for high-quality detection.
   Future<void> initCamera() async {
     try {
+      // Dispose previous controller instance before creating a new one.
+      await controller?.dispose();
+      controller = null;
+      isInitialized = false;
+
       final cameras = await availableCameras();
 
       if (cameras.isEmpty) {
         errorMessage = "No camera detected on device.";
-        notifyListeners();
+        _notifySafely();
         return;
       }
 
       // Select Rear Camera (Index 0)
       controller = CameraController(
         cameras[0],
-        ResolutionPreset.ultraHigh, // Use high resolution for better photo quality
+        ResolutionPreset
+            .ultraHigh, // Use high resolution for better photo quality
         enableAudio: false, // We only need visual for road damage detection
         imageFormatGroup:
             ImageFormatGroup.jpeg, // Use JPEG format for better compatibility
@@ -66,7 +86,7 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       errorMessage = "Failed to initialize camera: $e";
     }
 
-    notifyListeners();
+    _notifySafely();
   }
 
   /// Capture photo from camera stream
@@ -92,7 +112,7 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       return image;
     } catch (e) {
       errorMessage = "Failed to capture photo: $e";
-      notifyListeners();
+      _notifySafely();
       return null;
     }
   }
@@ -104,21 +124,19 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
   /// - AppLifecycleState.resumed: Re-initialize camera when app returns to foreground
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final CameraController? cameraController = controller;
-
-    // If controller doesn't exist or isn't ready, ignore
-    if (cameraController == null || !cameraController.value.isInitialized) {
-      return;
-    }
-
-    if (state == AppLifecycleState.inactive) {
-      // Release camera resource when app is not visible
-      cameraController.dispose();
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      // Release camera resource when app is not visible.
+      controller?.dispose();
+      controller = null;
       isInitialized = false;
-      notifyListeners();
+      _notifySafely();
     } else if (state == AppLifecycleState.resumed) {
-      // Re-initialize when user returns to app
-      initCamera();
+      // Re-initialize camera when user returns to app.
+      if (!_disposed) {
+        initCamera();
+      }
     }
   }
 
@@ -127,7 +145,7 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> toggleFlashlight() async {
     if (controller == null || !controller!.value.isInitialized) {
       errorMessage = "Camera not initialized for flashlight toggle";
-      notifyListeners();
+      _notifySafely();
       return;
     }
 
@@ -137,26 +155,30 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       // Use torch mode for continuous light (better compatibility than 'always')
       // Fallback to 'always' if torch not available on device
       final flashMode = nextState ? FlashMode.torch : FlashMode.off;
-      
+
       await controller!.setFlashMode(flashMode);
       isFlashlightOn = nextState;
-      errorMessage = null; // Clear error on success
+      lastFlashMessage = nextState ? "Torch ON" : "Torch OFF";
+      errorMessage = null;
     } catch (e) {
       // Try fallback: use 'always' mode
       if (nextState) {
         try {
           await controller!.setFlashMode(FlashMode.always);
           isFlashlightOn = true;
+          lastFlashMessage = "Torch ON (mode: always)";
           errorMessage = null;
         } catch (fallbackError) {
-          errorMessage = "Flashlight not supported on this device: $fallbackError";
           isFlashlightOn = false;
+          errorMessage = "Flashlight not supported on this device";
+          lastFlashMessage = "Torch tidak didukung";
         }
       } else {
         // Turning off should always work
         try {
           await controller!.setFlashMode(FlashMode.off);
           isFlashlightOn = false;
+          lastFlashMessage = "Torch OFF";
           errorMessage = null;
         } catch (turnOffError) {
           errorMessage = "Failed to turn off flashlight: $turnOffError";
@@ -164,14 +186,14 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       }
     }
 
-    notifyListeners();
+    _notifySafely();
   }
 
   /// Toggle overlay visibility
   /// UX Enhancement from Phase 6
   void toggleOverlay() {
     isOverlayVisible = !isOverlayVisible;
-    notifyListeners();
+    _notifySafely();
   }
 
   /// Start mock detection simulation
@@ -204,7 +226,7 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       ),
     ];
 
-    notifyListeners();
+    _notifySafely();
   }
 
   /// Get a random damage type from RDD-2022 dataset
@@ -236,6 +258,8 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
 
     // Release camera hardware
     controller?.dispose();
+    controller = null;
+    _disposed = true;
 
     super.dispose();
   }

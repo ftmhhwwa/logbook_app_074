@@ -11,6 +11,28 @@ import 'vision_controller.dart';
 ///
 /// Can be extended in Module 7 for YOLO integration
 class DamagePainter extends CustomPainter {
+  // ============ RIGID SCALING CONSTANTS ============
+  /// Coordinate scaling factor: normalized (0.0-1.0) to logical pixels.
+  static const double scalingFactorX = 1.0;
+  static const double scalingFactorY = 1.0;
+
+  // ============ PRECISE RENDERING CONSTANTS ============
+  static const double staticCrosshairLength = 50.0;
+  static const double staticCrosshairCircleRadius = 30.0;
+  static const double dynamicCrosshairCircleRadius = 2.5;
+
+  static const double boxStrokeWidth = 3.0;
+  static const double boxShadowBlur = 3.0;
+  static const double labelFontSize = 14.0;
+  static const double labelPadding = 4.0;
+  static const double labelBorderRadius = 4.0;
+  static const double labelBackgroundOpacity = 0.4;
+  static const double labelBorderStrokeWidth = 1.5;
+
+  // ============ MOBILE VIEWPORT SAFETY ============
+  /// Minimum margin to prevent edge clipping on small screens.
+  static const double viewportMarginPercent = 0.05;
+
   final List<DetectionResult> results;
 
   DamagePainter(this.results);
@@ -45,22 +67,22 @@ class DamagePainter extends CustomPainter {
 
     // Draw horizontal line
     canvas.drawLine(
-      Offset(centerX - 50, centerY),
-      Offset(centerX + 50, centerY),
+      Offset(centerX - staticCrosshairLength, centerY),
+      Offset(centerX + staticCrosshairLength, centerY),
       paint,
     );
 
     // Draw vertical line
     canvas.drawLine(
-      Offset(centerX, centerY - 50),
-      Offset(centerX, centerY + 50),
+      Offset(centerX, centerY - staticCrosshairLength),
+      Offset(centerX, centerY + staticCrosshairLength),
       paint,
     );
 
     // Draw circle in center
     canvas.drawCircle(
       Offset(centerX, centerY),
-      30,
+      staticCrosshairCircleRadius,
       Paint()
         ..color = Colors.white.withOpacity(0.3)
         ..style = PaintingStyle.stroke
@@ -70,7 +92,13 @@ class DamagePainter extends CustomPainter {
     // Draw label
     _drawLabel(
       canvas,
-      Rect.fromCircle(center: Offset(centerX - 70, centerY - 50), radius: 30),
+      Rect.fromCircle(
+        center: Offset(
+          centerX - (staticCrosshairLength + 20),
+          centerY - staticCrosshairLength,
+        ),
+        radius: staticCrosshairCircleRadius,
+      ),
       "Searching for Road Damage...",
       1.0,
     );
@@ -83,16 +111,23 @@ class DamagePainter extends CustomPainter {
   /// - Scaled to logical pixels on screen
   /// - Constrained within viewport for mobile UX
   void _drawDetectionBox(Canvas canvas, Size size, DetectionResult result) {
-    // Scale normalized coordinates to screen pixels
+    // RIGID SCALING: normalized coordinates -> logical pixels.
     var box = Rect.fromLTWH(
-      result.box.left * size.width,
-      result.box.top * size.height,
-      result.box.width * size.width,
-      result.box.height * size.height,
+      result.box.left * size.width * scalingFactorX,
+      result.box.top * size.height * scalingFactorY,
+      result.box.width * size.width * scalingFactorX,
+      result.box.height * size.height * scalingFactorY,
     );
 
-    // Constrain box within screen boundaries (mobile-safe clipping)
-    final screenBounds = Rect.fromLTWH(0, 0, size.width, size.height);
+    // Keep rendering inside a safe viewport margin.
+    final marginX = size.width * viewportMarginPercent;
+    final marginY = size.height * viewportMarginPercent;
+    final screenBounds = Rect.fromLTWH(
+      marginX,
+      marginY,
+      size.width - (marginX * 2),
+      size.height - (marginY * 2),
+    );
     box = box.intersect(screenBounds);
 
     // Skip rendering if box is completely outside bounds
@@ -106,7 +141,7 @@ class DamagePainter extends CustomPainter {
     // Draw bounding box
     final paint = Paint()
       ..color = boxColor
-      ..strokeWidth = 3.0
+      ..strokeWidth = boxStrokeWidth
       ..style = PaintingStyle.stroke;
 
     canvas.drawRect(box, paint);
@@ -114,7 +149,10 @@ class DamagePainter extends CustomPainter {
     // Draw shadow for better visibility
     final shadowPaint = Paint()
       ..color = Colors.black.withOpacity(0.5)
-      ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 3);
+      ..maskFilter = const ui.MaskFilter.blur(
+        ui.BlurStyle.normal,
+        boxShadowBlur,
+      );
 
     canvas.drawRect(box, shadowPaint);
 
@@ -152,7 +190,7 @@ class DamagePainter extends CustomPainter {
 
     canvas.drawCircle(
       center,
-      2.5,
+      dynamicCrosshairCircleRadius,
       Paint()..color = color,
     );
   }
@@ -173,12 +211,15 @@ class DamagePainter extends CustomPainter {
       text: ' $label - ${(score * 100).toInt()}% ',
       style: TextStyle(
         color: Colors.white,
-        fontSize: 14,
+        fontSize: labelFontSize,
         fontWeight: FontWeight.bold,
         backgroundColor: labelColor.withOpacity(0.85),
       ),
     );
 
+    // PRECISE RENDERING: TextPainter provides exact text dimensions
+    // Layout() calculates width/height based on constraints
+    // paint() renders at exact offset with no rounding errors
     final textPainter = TextPainter(
       text: textSpan,
       textDirection: TextDirection.ltr,
@@ -213,7 +254,7 @@ class DamagePainter extends CustomPainter {
         text: ' $label - ${(score * 100).toInt()}% ',
         style: TextStyle(
           color: Colors.black.withOpacity(0.6),
-          fontSize: 14,
+          fontSize: labelFontSize,
           fontWeight: FontWeight.bold,
           backgroundColor: Colors.black.withOpacity(0.15),
         ),
@@ -230,18 +271,18 @@ class DamagePainter extends CustomPainter {
 
     // Draw dark background for contrast
     final backgroundPaint = Paint()
-      ..color = Colors.black.withOpacity(0.4)
+      ..color = Colors.black.withOpacity(labelBackgroundOpacity)
       ..style = PaintingStyle.fill;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(
-          labelOffset.dx - 4,
-          labelOffset.dy - 2,
-          textPainter.width + 8,
-          textPainter.height + 4,
+          labelOffset.dx - labelPadding,
+          labelOffset.dy - labelPadding / 2,
+          textPainter.width + (labelPadding * 2),
+          textPainter.height + labelPadding,
         ),
-        const Radius.circular(4),
+        Radius.circular(labelBorderRadius),
       ),
       backgroundPaint,
     );
@@ -252,18 +293,18 @@ class DamagePainter extends CustomPainter {
     // Optional: Draw a colored border around label for extra emphasis
     final borderPaint = Paint()
       ..color = labelColor
-      ..strokeWidth = 1.5
+      ..strokeWidth = labelBorderStrokeWidth
       ..style = PaintingStyle.stroke;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(
-          labelOffset.dx - 4,
-          labelOffset.dy - 2,
-          textPainter.width + 8,
-          textPainter.height + 4,
+          labelOffset.dx - labelPadding,
+          labelOffset.dy - labelPadding / 2,
+          textPainter.width + (labelPadding * 2),
+          textPainter.height + labelPadding,
         ),
-        const Radius.circular(4),
+        Radius.circular(labelBorderRadius),
       ),
       borderPaint,
     );

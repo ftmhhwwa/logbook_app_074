@@ -55,11 +55,7 @@ class _OnboardingViewState extends State<OnboardingView> {
   }
 
   void _skipToEnd() {
-    _pageController.animateToPage(
-      _items.length - 1,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
+    _goToLogin();
   }
 
   @override
@@ -113,9 +109,7 @@ class _OnboardingViewState extends State<OnboardingView> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   TextButton(
-                    onPressed: _currentIndex == _items.length - 1
-                        ? null
-                        : _skipToEnd,
+                    onPressed: _skipToEnd,
                     child: const Text('Lewati'),
                   ),
                   Row(

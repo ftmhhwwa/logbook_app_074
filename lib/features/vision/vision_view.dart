@@ -59,8 +59,20 @@ class _VisionViewState extends State<VisionView> {
                     ? Icons.flash_on
                     : Icons.flash_off,
               ),
-              onPressed: _visionController.toggleFlashlight,
-              tooltip: 'Toggle Flashlight',
+              onPressed: () async {
+                await _visionController.toggleFlashlight();
+                if (context.mounted && _visionController.lastFlashMessage != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(_visionController.lastFlashMessage!),
+                      duration: const Duration(milliseconds: 800),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+              tooltip: _visionController.isFlashlightOn ? 'Torch ON' : 'Torch OFF',
+              color: _visionController.isFlashlightOn ? Colors.amber : null,
             ),
             // Overlay visibility toggle (Phase 6 UX Enhancement) - now reactive
             IconButton(
@@ -121,9 +133,6 @@ class _VisionViewState extends State<VisionView> {
     final isCameraAccessDenied = errorMsg?.toLowerCase().contains('no camera') ?? false;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Smart-Patrol Vision"),
-      ),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
