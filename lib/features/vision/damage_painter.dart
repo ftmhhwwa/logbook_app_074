@@ -17,6 +17,9 @@ class DamagePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Clip canvas to screen boundaries - prevent elements from going off-screen on mobile
+    canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
+
     // If no detections, draw static crosshair (Phase 4 requirement)
     if (results.isEmpty) {
       _drawStaticCrosshair(canvas, size);
@@ -75,17 +78,27 @@ class DamagePainter extends CustomPainter {
 
   /// Draw detection bounding box with label
   ///
-  /// Implements coordinate scaling:
+  /// Implements coordinate scaling and boundary constraints:
   /// - Normalized coordinates (0.0-1.0) from AI
   /// - Scaled to logical pixels on screen
+  /// - Constrained within viewport for mobile UX
   void _drawDetectionBox(Canvas canvas, Size size, DetectionResult result) {
     // Scale normalized coordinates to screen pixels
-    final box = Rect.fromLTWH(
+    var box = Rect.fromLTWH(
       result.box.left * size.width,
       result.box.top * size.height,
       result.box.width * size.width,
       result.box.height * size.height,
     );
+
+    // Constrain box within screen boundaries (mobile-safe clipping)
+    final screenBounds = Rect.fromLTWH(0, 0, size.width, size.height);
+    box = box.intersect(screenBounds);
+
+    // Skip rendering if box is completely outside bounds
+    if (box.isEmpty) {
+      return;
+    }
 
     // Get color based on damage severity
     final boxColor = _getColorForDamage(result.label);
@@ -144,19 +157,25 @@ class DamagePainter extends CustomPainter {
     );
   }
 
-  /// Draw detection label above bounding box
+  /// Draw detection label above bounding box with enhanced readability
   ///
-  /// Implements smart positioning:
+  /// Implements smart positioning and strong shadow/stroke effects:
   /// - Draws above box by default
   /// - Moves below box if label would go off-screen
+  /// - Adds multi-layer shadow for stroke-like effect
+  /// - Colors match damage severity
   void _drawLabel(Canvas canvas, Rect box, String label, double score) {
+    // Get severity-based color for label text
+    final labelColor = _getColorForDamage(label);
+
+    // Main label text style
     final textSpan = TextSpan(
       text: ' $label - ${(score * 100).toInt()}% ',
-      style: const TextStyle(
+      style: TextStyle(
         color: Colors.white,
         fontSize: 14,
         fontWeight: FontWeight.bold,
-        backgroundColor: Colors.black54,
+        backgroundColor: labelColor.withOpacity(0.85),
       ),
     );
 
@@ -175,28 +194,79 @@ class DamagePainter extends CustomPainter {
       labelY = box.bottom + 5;
     }
 
-    // Draw shadow for better readability
-    final shadowSpan = TextSpan(
-      text: ' $label - ${(score * 100).toInt()}% ',
-      style: const TextStyle(
-        color: Colors.black,
-        fontSize: 14,
-        fontWeight: FontWeight.bold,
+    final labelOffset = Offset(box.left, labelY);
+
+    // Draw multi-layer shadow/stroke effect for better readability
+    // This creates a stroke outline appearance
+    final shadowOffsets = [
+      const Offset(-1, -1),
+      const Offset(1, -1),
+      const Offset(-1, 1),
+      const Offset(1, 1),
+      const Offset(0, -1.5),
+      const Offset(0, 1.5),
+    ];
+
+    // Draw shadow outlines (stroke effect)
+    for (final offset in shadowOffsets) {
+      final shadowSpan = TextSpan(
+        text: ' $label - ${(score * 100).toInt()}% ',
+        style: TextStyle(
+          color: Colors.black.withOpacity(0.6),
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          backgroundColor: Colors.black.withOpacity(0.15),
+        ),
+      );
+
+      final shadowPainter = TextPainter(
+        text: shadowSpan,
+        textDirection: TextDirection.ltr,
+      );
+
+      shadowPainter.layout();
+      shadowPainter.paint(canvas, labelOffset + offset);
+    }
+
+    // Draw dark background for contrast
+    final backgroundPaint = Paint()
+      ..color = Colors.black.withOpacity(0.4)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          labelOffset.dx - 4,
+          labelOffset.dy - 2,
+          textPainter.width + 8,
+          textPainter.height + 4,
+        ),
+        const Radius.circular(4),
       ),
+      backgroundPaint,
     );
 
-    final shadowPainter = TextPainter(
-      text: shadowSpan,
-      textDirection: TextDirection.ltr,
+    // Draw main text with severity color background
+    textPainter.paint(canvas, labelOffset);
+
+    // Optional: Draw a colored border around label for extra emphasis
+    final borderPaint = Paint()
+      ..color = labelColor
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          labelOffset.dx - 4,
+          labelOffset.dy - 2,
+          textPainter.width + 8,
+          textPainter.height + 4,
+        ),
+        const Radius.circular(4),
+      ),
+      borderPaint,
     );
-
-    shadowPainter.layout();
-
-    // Draw shadow with offset
-    shadowPainter.paint(canvas, Offset(box.left + 2, labelY + 2));
-
-    // Draw main text
-    textPainter.paint(canvas, Offset(box.left, labelY));
   }
 
   /// Get color based on damage severity
