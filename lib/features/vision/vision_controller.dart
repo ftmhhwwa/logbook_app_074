@@ -212,12 +212,24 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Build filtered preview image bytes from captured photo.
-  /// Returns PNG bytes of processed (binary) image for UI preview.
-  Future<Uint8List?> buildFilteredPreview(XFile capturedPhoto) async {
+  /// Build interactive preview image bytes from captured photo.
+  /// Returns PNG bytes plus histogram and metrics for the preview page.
+  Future<PhotoPreviewResult?> buildInteractivePreview(
+    XFile capturedPhoto, {
+    double brightness = 0.0,
+    double contrast = 1.0,
+    bool grayscale = false,
+    bool edgeDetect = false,
+  }) async {
     try {
       final bytes = await capturedPhoto.readAsBytes();
-      final payload = <String, dynamic>{'bytes': Uint8List.fromList(bytes)};
+      final payload = <String, dynamic>{
+        'bytes': Uint8List.fromList(bytes),
+        'brightness': brightness,
+        'contrast': contrast,
+        'grayscale': grayscale,
+        'edgeDetect': edgeDetect,
+      };
       final result = await compute(_pcdPhotoWorker, payload);
 
       if (result['metrics'] is Map<String, dynamic>) {
@@ -225,9 +237,16 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       }
 
       final previewBytes = result['previewPng'];
-      if (previewBytes is Uint8List) {
+      final histogram = (result['histogram'] as List?)?.cast<int>();
+
+      if (previewBytes is Uint8List && histogram != null) {
         _notifySafely();
-        return previewBytes;
+        return PhotoPreviewResult(
+          previewPng: previewBytes,
+          histogram: histogram,
+          metrics: result['metrics'] as Map<String, dynamic>? ?? const {},
+          modeLabel: result['modeLabel']?.toString() ?? 'Preview',
+        );
       }
 
       errorMessage = result['error']?.toString() ?? 'Failed to build preview';
@@ -411,6 +430,21 @@ class DetectionResult {
   });
 }
 
+/// Result object for captured-photo preview filters.
+class PhotoPreviewResult {
+  final Uint8List previewPng;
+  final List<int> histogram;
+  final Map<String, dynamic> metrics;
+  final String modeLabel;
+
+  const PhotoPreviewResult({
+    required this.previewPng,
+    required this.histogram,
+    required this.metrics,
+    required this.modeLabel,
+  });
+}
+
 /// Isolate worker for PCD pipeline.
 ///
 /// Input payload keys:
@@ -503,26 +537,39 @@ Map<String, dynamic> _pcdWorker(Map<String, dynamic> payload) {
 /// - bytes: Uint8List (encoded image: jpg/png)
 Map<String, dynamic> _pcdPhotoWorker(Map<String, dynamic> payload) {
   final bytes = payload['bytes'] as Uint8List;
+  final brightness = (payload['brightness'] as num?)?.toDouble() ?? 0.0;
+  final contrast = (payload['contrast'] as num?)?.toDouble() ?? 1.0;
+  final grayscale = payload['grayscale'] as bool? ?? false;
+  final edgeDetect = payload['edgeDetect'] as bool? ?? false;
   final decoded = img.decodeImage(bytes);
   if (decoded == null) {
     return {'error': 'Unable to decode captured image'};
   }
 
   // Resize first to keep CPU processing fast and stable.
-  final resized = img.copyResize(decoded, width: 320, height: 320);
+  final resized = img.copyResize(decoded, width: 720);
 
-  // PCD pipeline: contrast -> grayscale -> blur -> convolution -> binary threshold.
-  final highContrastImg = img.adjustColor(resized, contrast: 1.5);
-  final grayscaleImg = img.grayscale(highContrastImg);
-  final blurredImg = img.gaussianBlur(grayscaleImg, radius: 3);
-  const edgeKernel = <num>[-1, -1, -1, -1, 8, -1, -1, -1, -1];
-  final edgeImg = img.convolution(
-    blurredImg,
-    filter: edgeKernel,
-    div: 1,
-    offset: 0,
+  // PCD pipeline: brightness/contrast -> optional grayscale -> optional edge detect.
+  final adjustedImg = img.adjustColor(
+    resized,
+    brightness: brightness,
+    contrast: contrast,
   );
-  final binaryImg = img.luminanceThreshold(edgeImg, threshold: 100);
+  final analysisBase = grayscale ? img.grayscale(adjustedImg) : adjustedImg;
+
+  img.Image previewImg = analysisBase;
+  if (edgeDetect) {
+    final graySource = img.grayscale(adjustedImg);
+    final blurredImg = img.gaussianBlur(graySource, radius: 3);
+    const edgeKernel = <num>[-1, -1, -1, -1, 8, -1, -1, -1, -1];
+    final edgeImg = img.convolution(
+      blurredImg,
+      filter: edgeKernel,
+      div: 1,
+      offset: 0,
+    );
+    previewImg = img.luminanceThreshold(edgeImg, threshold: 100);
+  }
 
   // Basic metrics for overlay/debug status.
   final histogram = List<int>.filled(256, 0);
@@ -530,7 +577,7 @@ Map<String, dynamic> _pcdPhotoWorker(Map<String, dynamic> payload) {
   var whitePixels = 0;
   var pixelCount = 0;
 
-  for (final p in binaryImg) {
+  for (final p in previewImg) {
     final lum = p.r.toInt().clamp(0, 255);
     histogram[lum] += 1;
     luminanceSum += lum;
@@ -549,14 +596,20 @@ Map<String, dynamic> _pcdPhotoWorker(Map<String, dynamic> payload) {
 
   final meanLuminance = pixelCount == 0 ? 0.0 : luminanceSum / pixelCount;
   final edgeDensity = pixelCount == 0 ? 0.0 : whitePixels / pixelCount;
-  final pngBytes = Uint8List.fromList(img.encodePng(binaryImg));
+  final pngBytes = Uint8List.fromList(img.encodePng(previewImg));
 
   return {
     'previewPng': pngBytes,
+    'histogram': histogram,
+    'modeLabel': edgeDetect
+        ? 'Edge Detect'
+        : grayscale
+        ? 'Grayscale'
+        : 'Color Preview',
     'metrics': {
       'status': 'Preview filter siap',
-      'width': binaryImg.width,
-      'height': binaryImg.height,
+      'width': previewImg.width,
+      'height': previewImg.height,
       'meanLuminance': meanLuminance,
       'histogramPeakBin': peakBin,
       'histogramPeakValue': peakValue,

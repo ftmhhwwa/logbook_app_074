@@ -1,22 +1,13 @@
 import 'package:camera/camera.dart';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import 'vision_controller.dart';
 import 'damage_painter.dart';
+import 'vision_controller.dart';
+import 'vision_preview_page.dart';
 
 /// VisionPage implements the layered stack architecture
 /// for Smart Patrol System.
-///
-/// Architecture:
-/// - Layer 1 (Bottom): CameraPreview - Live video feed from hardware
-/// - Layer 2 (Top): CustomPaint - Digital overlay for detection boxes
-///
-/// This follows Separation of Concerns principle:
-/// - VisionController: Manages camera lifecycle and detection logic
-/// - VisionPage: Manages UI layout and user interactions
-/// - DamagePainter: Manages drawing logic (Phase 4)
 class VisionView extends StatefulWidget {
   const VisionView({super.key});
 
@@ -25,22 +16,17 @@ class VisionView extends StatefulWidget {
 }
 
 class _VisionViewState extends State<VisionView> {
-  // Initialize controller locally for this page
   late VisionController _visionController;
 
   @override
   void initState() {
     super.initState();
     _visionController = VisionController();
-
-    // Start mock detection (Phase 5)
     _visionController.startMockDetection();
   }
 
   @override
   void dispose() {
-    // MANDATORY: Disconnect camera when navigating away
-    // This prevents memory leaks and battery drain
     _visionController.dispose();
     super.dispose();
   }
@@ -51,9 +37,8 @@ class _VisionViewState extends State<VisionView> {
       listenable: _visionController,
       builder: (context, child) => Scaffold(
         appBar: AppBar(
-          title: const Text("Smart-Patrol Vision"),
+          title: const Text('Smart-Patrol Vision'),
           actions: [
-            // Flashlight toggle (Phase 6 UX Enhancement) - now reactive
             IconButton(
               icon: Icon(
                 _visionController.isFlashlightOn
@@ -78,7 +63,6 @@ class _VisionViewState extends State<VisionView> {
                   : 'Torch OFF',
               color: _visionController.isFlashlightOn ? Colors.amber : null,
             ),
-            // Overlay visibility toggle (Phase 6 UX Enhancement) - now reactive
             IconButton(
               icon: Icon(
                 _visionController.isOverlayVisible
@@ -93,12 +77,10 @@ class _VisionViewState extends State<VisionView> {
         body: ListenableBuilder(
           listenable: _visionController,
           builder: (context, child) {
-            // Show loading if camera is initializing
             if (!_visionController.isInitialized) {
               return _buildLoadingState();
             }
 
-            // Continue to Stack structure
             return _buildVisionStack();
           },
         ),
@@ -128,7 +110,14 @@ class _VisionViewState extends State<VisionView> {
               return;
             }
 
-            await _showCapturePreviewDialog(image);
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => VisionPreviewPage(
+                  controller: _visionController,
+                  capturedImage: image,
+                ),
+              ),
+            );
           },
           tooltip: 'Capture Photo',
           child: const Icon(Icons.camera),
@@ -137,116 +126,7 @@ class _VisionViewState extends State<VisionView> {
     );
   }
 
-  Future<void> _showCapturePreviewDialog(XFile capturedImage) async {
-    final originalBytes = await capturedImage.readAsBytes();
-    if (!mounted) return;
-
-    Uint8List? filteredBytes;
-    var showingFiltered = false;
-    var isApplyingFilter = false;
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final displayedBytes = (showingFiltered && filteredBytes != null)
-                ? filteredBytes!
-                : originalBytes;
-
-            return AlertDialog(
-              title: const Text('Preview Foto'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.memory(
-                      displayedBytes,
-                      fit: BoxFit.contain,
-                      width: 280,
-                      height: 280,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    showingFiltered ? 'Mode: Filter PCD' : 'Mode: Foto Asli',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Sumber: ${capturedImage.path}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  if (isApplyingFilter) ...[
-                    const SizedBox(height: 12),
-                    const LinearProgressIndicator(),
-                  ],
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isApplyingFilter
-                      ? null
-                      : () => Navigator.pop(dialogContext),
-                  child: const Text('Tutup'),
-                ),
-                ElevatedButton(
-                  onPressed: isApplyingFilter
-                      ? null
-                      : () async {
-                          if (showingFiltered) {
-                            setDialogState(() {
-                              showingFiltered = false;
-                            });
-                            return;
-                          }
-
-                          setDialogState(() {
-                            isApplyingFilter = true;
-                          });
-
-                          final result = await _visionController
-                              .buildFilteredPreview(capturedImage);
-
-                          if (!mounted) return;
-
-                          if (result != null) {
-                            setDialogState(() {
-                              filteredBytes = result;
-                              showingFiltered = true;
-                              isApplyingFilter = false;
-                            });
-                          } else {
-                            setDialogState(() {
-                              isApplyingFilter = false;
-                            });
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  _visionController.errorMessage ??
-                                      'Gagal membuat filter PCD',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                  child: Text(
-                    showingFiltered ? 'Tampilkan Asli' : 'Filter PCD',
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// Build loading state with informative message and permission handling
-  /// Phase 6 UX Enhancement - improved with better error messaging
+  /// Build loading state with informative message and permission handling.
   Widget _buildLoadingState() {
     final errorMsg = _visionController.errorMessage;
     final isPermissionDenied =
@@ -261,7 +141,6 @@ class _VisionViewState extends State<VisionView> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Error state: Camera or permission denied
               if (isPermissionDenied || isCameraAccessDenied) ...[
                 Container(
                   padding: const EdgeInsets.all(24),
@@ -276,8 +155,8 @@ class _VisionViewState extends State<VisionView> {
                       const SizedBox(height: 16),
                       Text(
                         isPermissionDenied
-                            ? "Camera Permission Denied"
-                            : "No Camera Access",
+                            ? 'Camera Permission Denied'
+                            : 'No Camera Access',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -288,8 +167,8 @@ class _VisionViewState extends State<VisionView> {
                       const SizedBox(height: 12),
                       Text(
                         isPermissionDenied
-                            ? "This app needs camera permission to detect road damage. Please grant permission in Settings."
-                            : "No camera device found on this device. Please ensure your device has a working camera.",
+                            ? 'This app needs camera permission to detect road damage. Please grant permission in Settings.'
+                            : 'No camera device found on this device. Please ensure your device has a working camera.',
                         style: TextStyle(
                           fontSize: 14,
                           color: Colors.red.shade700,
@@ -305,7 +184,7 @@ class _VisionViewState extends State<VisionView> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            "Error: $errorMsg",
+                            'Error: $errorMsg',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.red.shade600,
@@ -319,7 +198,7 @@ class _VisionViewState extends State<VisionView> {
                       ElevatedButton.icon(
                         onPressed: () => openAppSettings(),
                         icon: const Icon(Icons.settings),
-                        label: const Text("Open Settings"),
+                        label: const Text('Open Settings'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red.shade700,
                           foregroundColor: Colors.white,
@@ -332,17 +211,15 @@ class _VisionViewState extends State<VisionView> {
                       const SizedBox(height: 12),
                       OutlinedButton(
                         onPressed: () => _visionController.initCamera(),
-                        child: const Text("Retry"),
+                        child: const Text('Retry'),
                       ),
                     ],
                   ),
                 ),
               ] else ...[
-                // Loading state: Initializing camera
                 Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Animated background circle
                     Container(
                       width: 120,
                       height: 120,
@@ -355,7 +232,6 @@ class _VisionViewState extends State<VisionView> {
                         ),
                       ),
                     ),
-                    // Circular progress indicator
                     const CircularProgressIndicator(
                       strokeWidth: 4,
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
@@ -364,7 +240,7 @@ class _VisionViewState extends State<VisionView> {
                 ),
                 const SizedBox(height: 32),
                 Text(
-                  "Menghubungkan ke Sensor Visual...",
+                  'Menghubungkan ke Sensor Visual...',
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
@@ -372,22 +248,21 @@ class _VisionViewState extends State<VisionView> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Mohon tunggu sampai kamera siap",
+                  'Mohon tunggu sampai kamera siap',
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
-                // Steps indicator
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _buildStepIndicator(1, "Request"),
+                    _buildStepIndicator(1, 'Request'),
                     const SizedBox(width: 12),
-                    _buildStepIndicator(2, "Init"),
+                    _buildStepIndicator(2, 'Init'),
                     const SizedBox(width: 12),
-                    _buildStepIndicator(3, "Ready"),
+                    _buildStepIndicator(3, 'Ready'),
                   ],
                 ),
               ],
@@ -398,7 +273,6 @@ class _VisionViewState extends State<VisionView> {
     );
   }
 
-  /// Build a step indicator widget for loading sequence
   Widget _buildStepIndicator(int step, String label) {
     return Column(
       children: [
@@ -426,12 +300,6 @@ class _VisionViewState extends State<VisionView> {
     );
   }
 
-  /// Build the layered stack architecture
-  ///
-  /// This is the core of Vision architecture:
-  /// - Stack with fit: StackFit.expand fills entire screen
-  /// - Layer 1: CameraPreview with AspectRatio to prevent distortion
-  /// - Layer 2: CustomPaint for digital overlay
   Widget _buildVisionStack() {
     final cameraController = _visionController.controller!;
     final previewSize = cameraController.value.previewSize;
@@ -443,14 +311,11 @@ class _VisionViewState extends State<VisionView> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // LAYER 1: Hardware Preview
-        // Use cover scaling with native preview size to avoid portrait distortion.
         Positioned.fill(
           child: ClipRect(
             child: FittedBox(
               fit: BoxFit.cover,
               child: SizedBox(
-                // previewSize is landscape-oriented on most Android devices.
                 width: previewSize.height,
                 height: previewSize.width,
                 child: CameraPreview(cameraController),
@@ -458,17 +323,13 @@ class _VisionViewState extends State<VisionView> {
             ),
           ),
         ),
-
-        // LAYER 2: Digital Overlay (Canvas)
-        // This layer is transparent and sits exactly above camera
-        // DamagePainter will draw detection boxes here (Phase 4)
         if (_visionController.isOverlayVisible)
           Positioned.fill(
             child: CustomPaint(
               painter: DamagePainter(
                 _visionController.currentDetections,
                 pcdMetrics: _visionController.lastPcdResult,
-              ), // Phase 4: Will be updated with detections
+              ),
             ),
           ),
       ],
