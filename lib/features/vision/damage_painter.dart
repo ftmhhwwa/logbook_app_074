@@ -34,13 +34,16 @@ class DamagePainter extends CustomPainter {
   static const double viewportMarginPercent = 0.05;
 
   final List<DetectionResult> results;
+  final Map<String, dynamic>? pcdMetrics;
 
-  DamagePainter(this.results);
+  DamagePainter(this.results, {this.pcdMetrics});
 
   @override
   void paint(Canvas canvas, Size size) {
     // Clip canvas to screen boundaries - prevent elements from going off-screen on mobile
     canvas.clipRect(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    _drawPcdStatusPanel(canvas, size);
 
     // If no detections, draw static crosshair (Phase 4 requirement)
     if (results.isEmpty) {
@@ -52,6 +55,59 @@ class DamagePainter extends CustomPainter {
     for (var result in results) {
       _drawDetectionBox(canvas, size, result);
     }
+  }
+
+  void _drawPcdStatusPanel(Canvas canvas, Size size) {
+    final metrics = pcdMetrics;
+    if (metrics == null) return;
+
+    final mean = (metrics['meanLuminance'] as num?)?.toDouble();
+    final edge = (metrics['edgeDensity'] as num?)?.toDouble();
+    final peak = metrics['histogramPeakBin'];
+
+    final info =
+        'PCD mean:${mean?.toStringAsFixed(1) ?? '-'}  '
+        'edge:${edge == null ? '-' : '${(edge * 100).toStringAsFixed(1)}%'}  '
+        'peak:${peak ?? '-'}';
+
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: info,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: size.width * 0.9);
+
+    const panelPadding = 8.0;
+    const panelTop = 12.0;
+    const panelLeft = 12.0;
+
+    final panelRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        panelLeft,
+        panelTop,
+        textPainter.width + panelPadding * 2,
+        textPainter.height + panelPadding * 2,
+      ),
+      const Radius.circular(8),
+    );
+
+    final bgPaint = Paint()..color = Colors.black.withOpacity(0.55);
+    final borderPaint = Paint()
+      ..color = Colors.cyanAccent.withOpacity(0.7)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    canvas.drawRRect(panelRect, bgPaint);
+    canvas.drawRRect(panelRect, borderPaint);
+    textPainter.paint(
+      canvas,
+      const Offset(panelLeft + panelPadding, panelTop + panelPadding),
+    );
   }
 
   /// Draw static crosshair as visual anchor
@@ -326,8 +382,8 @@ class DamagePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    // Repaint when detections change
-    // In Phase 5, this will be true for dynamic updates
-    return true;
+    if (oldDelegate is! DamagePainter) return true;
+    return oldDelegate.results != results ||
+        oldDelegate.pcdMetrics != pcdMetrics;
   }
 }

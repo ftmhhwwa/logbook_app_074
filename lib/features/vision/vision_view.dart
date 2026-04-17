@@ -1,4 +1,5 @@
 import 'package:camera/camera.dart';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -61,7 +62,8 @@ class _VisionViewState extends State<VisionView> {
               ),
               onPressed: () async {
                 await _visionController.toggleFlashlight();
-                if (context.mounted && _visionController.lastFlashMessage != null) {
+                if (context.mounted &&
+                    _visionController.lastFlashMessage != null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(_visionController.lastFlashMessage!),
@@ -71,7 +73,9 @@ class _VisionViewState extends State<VisionView> {
                   );
                 }
               },
-              tooltip: _visionController.isFlashlightOn ? 'Torch ON' : 'Torch OFF',
+              tooltip: _visionController.isFlashlightOn
+                  ? 'Torch ON'
+                  : 'Torch OFF',
               color: _visionController.isFlashlightOn ? Colors.amber : null,
             ),
             // Overlay visibility toggle (Phase 6 UX Enhancement) - now reactive
@@ -87,36 +91,44 @@ class _VisionViewState extends State<VisionView> {
           ],
         ),
         body: ListenableBuilder(
-        listenable: _visionController,
-        builder: (context, child) {
-          // Show loading if camera is initializing
-          if (!_visionController.isInitialized) {
-            return _buildLoadingState();
-          }
+          listenable: _visionController,
+          builder: (context, child) {
+            // Show loading if camera is initializing
+            if (!_visionController.isInitialized) {
+              return _buildLoadingState();
+            }
 
-          // Continue to Stack structure
-          return _buildVisionStack();
-        },
-      ),
+            // Continue to Stack structure
+            return _buildVisionStack();
+          },
+        ),
         floatingActionButton: FloatingActionButton(
           onPressed: () async {
+            if (!context.mounted) return;
+
+            showDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              builder: (_) => const Center(child: CircularProgressIndicator()),
+            );
+
             final image = await _visionController.takePhoto();
-            if (image != null && context.mounted) {
+
+            if (!context.mounted) return;
+            Navigator.of(context, rootNavigator: true).pop();
+
+            if (image == null) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Photo saved: ${image.path}'),
-                  duration: const Duration(seconds: 3),
-                  action: SnackBarAction(
-                    label: 'View',
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                      // You can add code here to open the image
-                      // For now, just showing the path
-                    },
+                  content: Text(
+                    _visionController.errorMessage ?? 'Gagal mengambil foto',
                   ),
                 ),
               );
+              return;
             }
+
+            await _showCapturePreviewDialog(image);
           },
           tooltip: 'Capture Photo',
           child: const Icon(Icons.camera),
@@ -125,12 +137,122 @@ class _VisionViewState extends State<VisionView> {
     );
   }
 
+  Future<void> _showCapturePreviewDialog(XFile capturedImage) async {
+    final originalBytes = await capturedImage.readAsBytes();
+    if (!mounted) return;
+
+    Uint8List? filteredBytes;
+    var showingFiltered = false;
+    var isApplyingFilter = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final displayedBytes = (showingFiltered && filteredBytes != null)
+                ? filteredBytes!
+                : originalBytes;
+
+            return AlertDialog(
+              title: const Text('Preview Foto'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(
+                      displayedBytes,
+                      fit: BoxFit.contain,
+                      width: 280,
+                      height: 280,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    showingFiltered ? 'Mode: Filter PCD' : 'Mode: Foto Asli',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Sumber: ${capturedImage.path}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (isApplyingFilter) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isApplyingFilter
+                      ? null
+                      : () => Navigator.pop(dialogContext),
+                  child: const Text('Tutup'),
+                ),
+                ElevatedButton(
+                  onPressed: isApplyingFilter
+                      ? null
+                      : () async {
+                          if (showingFiltered) {
+                            setDialogState(() {
+                              showingFiltered = false;
+                            });
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isApplyingFilter = true;
+                          });
+
+                          final result = await _visionController
+                              .buildFilteredPreview(capturedImage);
+
+                          if (!mounted) return;
+
+                          if (result != null) {
+                            setDialogState(() {
+                              filteredBytes = result;
+                              showingFiltered = true;
+                              isApplyingFilter = false;
+                            });
+                          } else {
+                            setDialogState(() {
+                              isApplyingFilter = false;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  _visionController.errorMessage ??
+                                      'Gagal membuat filter PCD',
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                  child: Text(
+                    showingFiltered ? 'Tampilkan Asli' : 'Filter PCD',
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   /// Build loading state with informative message and permission handling
   /// Phase 6 UX Enhancement - improved with better error messaging
   Widget _buildLoadingState() {
     final errorMsg = _visionController.errorMessage;
-    final isPermissionDenied = errorMsg?.toLowerCase().contains('permission') ?? false;
-    final isCameraAccessDenied = errorMsg?.toLowerCase().contains('no camera') ?? false;
+    final isPermissionDenied =
+        errorMsg?.toLowerCase().contains('permission') ?? false;
+    final isCameraAccessDenied =
+        errorMsg?.toLowerCase().contains('no camera') ?? false;
 
     return Scaffold(
       body: Center(
@@ -150,11 +272,7 @@ class _VisionViewState extends State<VisionView> {
                   ),
                   child: Column(
                     children: [
-                      Icon(
-                        Icons.block,
-                        size: 64,
-                        color: Colors.red.shade700,
-                      ),
+                      Icon(Icons.block, size: 64, color: Colors.red.shade700),
                       const SizedBox(height: 16),
                       Text(
                         isPermissionDenied
@@ -247,17 +365,17 @@ class _VisionViewState extends State<VisionView> {
                 const SizedBox(height: 32),
                 Text(
                   "Menghubungkan ke Sensor Visual...",
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 Text(
                   "Mohon tunggu sampai kamera siap",
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.grey.shade600,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey.shade600),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
@@ -303,10 +421,7 @@ class _VisionViewState extends State<VisionView> {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(fontSize: 12),
-        ),
+        Text(label, style: const TextStyle(fontSize: 12)),
       ],
     );
   }
@@ -352,6 +467,7 @@ class _VisionViewState extends State<VisionView> {
             child: CustomPaint(
               painter: DamagePainter(
                 _visionController.currentDetections,
+                pcdMetrics: _visionController.lastPcdResult,
               ), // Phase 4: Will be updated with detections
             ),
           ),

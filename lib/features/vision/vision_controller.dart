@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 
 /// VisionController manages the camera lifecycle and detection logic
 /// for the Smart Patrol System.
@@ -27,6 +30,12 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
   // Detection results (for Phase 5)
   List<DetectionResult> currentDetections = [];
   Timer? _mockDetectionTimer;
+
+  // ============ PCD PIPELINE STATE ============
+  bool isProcessing = false;
+  bool isPcdStreamRunning = false;
+  int _processedFrameCount = 0;
+  Map<String, dynamic>? lastPcdResult;
 
   // UX Enhancement: Flashlight and Overlay toggles (Phase 6)
   bool isFlashlightOn = false;
@@ -72,13 +81,16 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
             .ultraHigh, // Use high resolution for better photo quality
         enableAudio: false, // We only need visual for road damage detection
         imageFormatGroup:
-            ImageFormatGroup.jpeg, // Use JPEG format for better compatibility
+            ImageFormatGroup.yuv420, // Better for per-frame PCD processing
       );
 
       await controller!.initialize();
 
       // Keep camera orientation consistent in portrait mode.
       await controller!.lockCaptureOrientation(DeviceOrientation.portraitUp);
+
+      // Start per-frame PCD stream in background isolate.
+      await startPcdStream();
 
       isInitialized = true;
       errorMessage = null;
@@ -89,6 +101,80 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
     _notifySafely();
   }
 
+  /// Start real-time PCD stream.
+  ///
+  /// Notes:
+  /// - CameraImage is not directly sendable to isolate in a safe/reliable way.
+  /// - We extract a lightweight payload (luma plane bytes + metadata) and pass it to compute().
+  Future<void> startPcdStream() async {
+    final activeController = controller;
+    if (activeController == null || !activeController.value.isInitialized) {
+      return;
+    }
+    if (isPcdStreamRunning) {
+      return;
+    }
+
+    await activeController.startImageStream((CameraImage cameraImage) async {
+      if (_disposed || isProcessing) {
+        return; // Drop frame if controller is disposed or worker still busy.
+      }
+
+      isProcessing = true;
+
+      try {
+        final firstPlane = cameraImage.planes.first;
+        final payload = <String, dynamic>{
+          'bytes': Uint8List.fromList(firstPlane.bytes),
+          'width': cameraImage.width,
+          'height': cameraImage.height,
+          'bytesPerRow': firstPlane.bytesPerRow,
+          'bytesPerPixel': firstPlane.bytesPerPixel ?? 1,
+        };
+
+        final result = await compute(_pcdWorker, payload);
+        lastPcdResult = result;
+        _processedFrameCount += 1;
+
+        // Notify periodically to avoid excessive UI rebuilds.
+        if (_processedFrameCount % 10 == 0) {
+          _notifySafely();
+        }
+      } catch (e) {
+        errorMessage = 'PCD stream error: $e';
+        _notifySafely();
+      } finally {
+        isProcessing = false;
+      }
+    });
+
+    isPcdStreamRunning = true;
+    _notifySafely();
+  }
+
+  Future<void> stopPcdStream() async {
+    final activeController = controller;
+    if (activeController == null) {
+      isPcdStreamRunning = false;
+      return;
+    }
+
+    if (!activeController.value.isStreamingImages) {
+      isPcdStreamRunning = false;
+      return;
+    }
+
+    try {
+      await activeController.stopImageStream();
+    } catch (_) {
+      // Ignore stream stop errors during lifecycle transitions.
+    } finally {
+      isPcdStreamRunning = false;
+      isProcessing = false;
+      _notifySafely();
+    }
+  }
+
   /// Capture photo from camera stream
   /// This ensures full frame capture with proper resolution
   Future<XFile?> takePhoto() async {
@@ -97,6 +183,11 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     try {
+      final wasStreaming = isPcdStreamRunning;
+      if (wasStreaming) {
+        await stopPcdStream();
+      }
+
       // Pause camera stream briefly to ensure clean capture
       await controller!.pausePreview();
 
@@ -109,9 +200,41 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
       // Resume camera stream
       await controller!.resumePreview();
 
+      if (wasStreaming) {
+        await startPcdStream();
+      }
+
       return image;
     } catch (e) {
       errorMessage = "Failed to capture photo: $e";
+      _notifySafely();
+      return null;
+    }
+  }
+
+  /// Build filtered preview image bytes from captured photo.
+  /// Returns PNG bytes of processed (binary) image for UI preview.
+  Future<Uint8List?> buildFilteredPreview(XFile capturedPhoto) async {
+    try {
+      final bytes = await capturedPhoto.readAsBytes();
+      final payload = <String, dynamic>{'bytes': Uint8List.fromList(bytes)};
+      final result = await compute(_pcdPhotoWorker, payload);
+
+      if (result['metrics'] is Map<String, dynamic>) {
+        lastPcdResult = result['metrics'] as Map<String, dynamic>;
+      }
+
+      final previewBytes = result['previewPng'];
+      if (previewBytes is Uint8List) {
+        _notifySafely();
+        return previewBytes;
+      }
+
+      errorMessage = result['error']?.toString() ?? 'Failed to build preview';
+      _notifySafely();
+      return null;
+    } catch (e) {
+      errorMessage = 'Failed to process filtered preview: $e';
       _notifySafely();
       return null;
     }
@@ -128,6 +251,7 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       // Release camera resource when app is not visible.
+      unawaited(stopPcdStream());
       controller?.dispose();
       controller = null;
       isInitialized = false;
@@ -256,6 +380,8 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
     // Cancel mock detection timer
     _mockDetectionTimer?.cancel();
 
+    unawaited(stopPcdStream());
+
     // Release camera hardware
     controller?.dispose();
     controller = null;
@@ -283,4 +409,158 @@ class DetectionResult {
     required this.label,
     required this.score,
   });
+}
+
+/// Isolate worker for PCD pipeline.
+///
+/// Input payload keys:
+/// - bytes: Uint8List (luma / first plane)
+/// - width: int
+/// - height: int
+/// - bytesPerRow: int
+/// - bytesPerPixel: int
+Map<String, dynamic> _pcdWorker(Map<String, dynamic> payload) {
+  final bytes = payload['bytes'] as Uint8List;
+  final width = payload['width'] as int;
+  final height = payload['height'] as int;
+  final bytesPerRow = payload['bytesPerRow'] as int;
+  final bytesPerPixel = payload['bytesPerPixel'] as int;
+
+  // 1) Convert camera plane to grayscale image
+  final src = img.Image(width: width, height: height);
+  for (var y = 0; y < height; y++) {
+    for (var x = 0; x < width; x++) {
+      final rowIndex = y * bytesPerRow;
+      final pixelIndex = rowIndex + (x * bytesPerPixel);
+      if (pixelIndex >= bytes.length) continue;
+
+      final v = bytes[pixelIndex];
+      src.setPixelRgba(x, y, v, v, v, 255);
+    }
+  }
+
+  // Important for real-time CPU processing: resize to small resolution first.
+  final resized = img.copyResize(src, width: 320, height: 320);
+
+  // 2) Histogram & contrast enhancement
+  final highContrastImg = img.adjustColor(resized, contrast: 1.5);
+  final grayscaleImg = img.grayscale(highContrastImg);
+
+  final histogram = List<int>.filled(256, 0);
+  var luminanceSum = 0;
+  var pixelCount = 0;
+  for (final p in grayscaleImg) {
+    final lum = p.r.toInt().clamp(0, 255);
+    histogram[lum] += 1;
+    luminanceSum += lum;
+    pixelCount += 1;
+  }
+
+  // 3) Convolution pipeline (blur + edge)
+  final blurredImg = img.gaussianBlur(grayscaleImg, radius: 3);
+  const edgeKernel = <num>[-1, -1, -1, -1, 8, -1, -1, -1, -1];
+  final edgeImg = img.convolution(
+    blurredImg,
+    filter: edgeKernel,
+    div: 1,
+    offset: 0,
+  );
+
+  // 4) Binary thresholding
+  final binaryImg = img.luminanceThreshold(edgeImg, threshold: 100);
+
+  var whitePixels = 0;
+  for (final p in binaryImg) {
+    if (p.r > 127) whitePixels += 1;
+  }
+
+  // Quick histogram peaks for logging/debugging.
+  var peakBin = 0;
+  var peakValue = 0;
+  for (var i = 0; i < histogram.length; i++) {
+    if (histogram[i] > peakValue) {
+      peakValue = histogram[i];
+      peakBin = i;
+    }
+  }
+
+  final meanLuminance = pixelCount == 0 ? 0.0 : luminanceSum / pixelCount;
+  final edgeDensity = pixelCount == 0 ? 0.0 : whitePixels / pixelCount;
+
+  return {
+    'status': 'Pemrosesan PCD Selesai',
+    'width': resized.width,
+    'height': resized.height,
+    'meanLuminance': meanLuminance,
+    'histogramPeakBin': peakBin,
+    'histogramPeakValue': peakValue,
+    'edgeDensity': edgeDensity,
+  };
+}
+
+/// Isolate worker for captured-photo preview processing.
+/// Input payload keys:
+/// - bytes: Uint8List (encoded image: jpg/png)
+Map<String, dynamic> _pcdPhotoWorker(Map<String, dynamic> payload) {
+  final bytes = payload['bytes'] as Uint8List;
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) {
+    return {'error': 'Unable to decode captured image'};
+  }
+
+  // Resize first to keep CPU processing fast and stable.
+  final resized = img.copyResize(decoded, width: 320, height: 320);
+
+  // PCD pipeline: contrast -> grayscale -> blur -> convolution -> binary threshold.
+  final highContrastImg = img.adjustColor(resized, contrast: 1.5);
+  final grayscaleImg = img.grayscale(highContrastImg);
+  final blurredImg = img.gaussianBlur(grayscaleImg, radius: 3);
+  const edgeKernel = <num>[-1, -1, -1, -1, 8, -1, -1, -1, -1];
+  final edgeImg = img.convolution(
+    blurredImg,
+    filter: edgeKernel,
+    div: 1,
+    offset: 0,
+  );
+  final binaryImg = img.luminanceThreshold(edgeImg, threshold: 100);
+
+  // Basic metrics for overlay/debug status.
+  final histogram = List<int>.filled(256, 0);
+  var luminanceSum = 0;
+  var whitePixels = 0;
+  var pixelCount = 0;
+
+  for (final p in binaryImg) {
+    final lum = p.r.toInt().clamp(0, 255);
+    histogram[lum] += 1;
+    luminanceSum += lum;
+    if (lum > 127) whitePixels += 1;
+    pixelCount += 1;
+  }
+
+  var peakBin = 0;
+  var peakValue = 0;
+  for (var i = 0; i < histogram.length; i++) {
+    if (histogram[i] > peakValue) {
+      peakValue = histogram[i];
+      peakBin = i;
+    }
+  }
+
+  final meanLuminance = pixelCount == 0 ? 0.0 : luminanceSum / pixelCount;
+  final edgeDensity = pixelCount == 0 ? 0.0 : whitePixels / pixelCount;
+  final pngBytes = Uint8List.fromList(img.encodePng(binaryImg));
+
+  return {
+    'previewPng': pngBytes,
+    'metrics': {
+      'status': 'Preview filter siap',
+      'width': binaryImg.width,
+      'height': binaryImg.height,
+      'meanLuminance': meanLuminance,
+      'histogramPeakBin': peakBin,
+      'histogramPeakValue': peakValue,
+      'edgeDensity': edgeDensity,
+    },
+  };
 }
