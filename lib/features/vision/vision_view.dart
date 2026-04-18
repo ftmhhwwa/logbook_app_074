@@ -139,7 +139,7 @@ class _VisionViewState extends State<VisionView> {
                       ),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: const Color.fromARGB(255, 161, 99, 93),
+                        backgroundColor: const Color(0xFF4E342E),
                       ),
                     ),
                   ),

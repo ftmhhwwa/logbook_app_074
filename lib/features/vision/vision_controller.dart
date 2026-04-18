@@ -1382,7 +1382,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
         children: [
           // Header (non-scrollable)
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
                 const Icon(Icons.tune_rounded, color: Colors.deepPurple),
@@ -1401,266 +1401,377 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
               ],
             ),
           ),
-          const Divider(height: 1, indent: 16, endIndent: 16),
-          // Scrollable content
+          const Divider(height: 1, indent: 12, endIndent: 12),
+          // Domain selector
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                SizedBox(
+                  height: 32,
+                  child: InputChip(
+                    selected: _activeDomain == VisionImageDomain.spatial,
+                    label: const Text(
+                      'Spatial',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    onSelected: (_) {
+                      setState(() => _activeDomain = VisionImageDomain.spatial);
+                      _schedulePreviewRefresh(immediate: true);
+                    },
+                  ),
+                ),
+                SizedBox(
+                  height: 32,
+                  child: InputChip(
+                    selected: _activeDomain == VisionImageDomain.frequency,
+                    label: const Text(
+                      'Frequency',
+                      style: TextStyle(fontSize: 11),
+                    ),
+                    onSelected: (_) => _transformToFrequencyDomain(),
+                  ),
+                ),
+                if (_activeDomain == VisionImageDomain.frequency)
+                  SizedBox(
+                    height: 32,
+                    child: ActionChip(
+                      avatar: const Icon(Icons.undo_rounded, size: 16),
+                      label: const Text(
+                        'Inverse DFT',
+                        style: TextStyle(fontSize: 10),
+                      ),
+                      onPressed: _inverseDftToSpatial,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Horizontal scrollable filters
           Expanded(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        InputChip(
-                          selected: _activeDomain == VisionImageDomain.spatial,
-                          label: const Text('Spatial Domain'),
-                          onSelected: (_) {
-                            setState(
-                              () => _activeDomain = VisionImageDomain.spatial,
-                            );
-                            _schedulePreviewRefresh(immediate: true);
-                          },
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              clipBehavior: Clip.none,
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+              children: [
+                _buildFilterCard(
+                  icon: Icons.brightness_5,
+                  label: 'Brightness',
+                  isActive: _brightness.abs() > 0.001,
+                  enabled: isSpatialDomain,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _brightness.toStringAsFixed(2),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
                         ),
-                        InputChip(
-                          selected:
-                              _activeDomain == VisionImageDomain.frequency,
-                          label: const Text('Frequency Domain'),
-                          onSelected: (_) => _transformToFrequencyDomain(),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: 100,
+                        child: Slider(
+                          value: _brightness,
+                          min: -1.0,
+                          max: 1.0,
+                          divisions: 20,
+                          onChanged: isSpatialDomain
+                              ? (value) {
+                                  setState(() => _brightness = value);
+                                  _schedulePreviewRefresh();
+                                }
+                              : null,
                         ),
-                        if (_activeDomain == VisionImageDomain.frequency)
-                          ActionChip(
-                            avatar: const Icon(Icons.undo_rounded, size: 18),
-                            label: const Text('Inverse DFT'),
-                            onPressed: _inverseDftToSpatial,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildSlider(
-                      label: 'Brightness',
-                      value: _brightness,
-                      min: -1.0,
-                      max: 1.0,
-                      divisions: 20,
-                      valueText: _brightness.toStringAsFixed(2),
-                      enabled: isSpatialDomain,
-                      onChanged: (value) {
-                        setState(() => _brightness = value);
-                        _schedulePreviewRefresh();
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    _buildSlider(
-                      label: 'Contrast',
-                      value: _contrast,
-                      min: 0.5,
-                      max: 2.0,
-                      divisions: 30,
-                      valueText: _contrast.toStringAsFixed(2),
-                      enabled: isSpatialDomain,
-                      onChanged: (value) {
-                        setState(() => _contrast = value);
-                        _schedulePreviewRefresh();
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _histogramEqualization,
-                      title: const Text('Histogram Equalization'),
-                      subtitle: const Text(
-                        'Tingkatkan kontras global grayscale',
-                      ),
-                      onChanged: isSpatialDomain
-                          ? (value) {
-                              setState(() => _histogramEqualization = value);
-                              _schedulePreviewRefresh();
-                            }
-                          : null,
-                    ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _gaussianBlur,
-                      title: const Text('Gaussian Blur'),
-                      subtitle: const Text(
-                        'Peredam noise berbasis kernel gaussian',
-                      ),
-                      onChanged: isSpatialDomain
-                          ? (value) {
-                              setState(() => _gaussianBlur = value);
-                              _schedulePreviewRefresh();
-                            }
-                          : null,
-                    ),
-                    if (_gaussianBlur)
-                      _buildSlider(
-                        label: 'Gaussian Kernel',
-                        value: _gaussianKernelSize.toDouble(),
-                        min: 3,
-                        max: 11,
-                        divisions: 4,
-                        valueText: _gaussianKernelSize.toString(),
-                        enabled: isSpatialDomain,
-                        onChanged: (value) {
-                          setState(() => _gaussianKernelSize = value.round());
-                          _schedulePreviewRefresh();
-                        },
-                      ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _sharpening,
-                      title: const Text('Sharpening'),
-                      subtitle: const Text(
-                        'Menonjolkan detail tepi menggunakan kernel',
-                      ),
-                      onChanged: isSpatialDomain
-                          ? (value) {
-                              setState(() => _sharpening = value);
-                              _schedulePreviewRefresh();
-                            }
-                          : null,
-                    ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _edgeDetect,
-                      title: const Text('Edge Detection (Canny)'),
-                      subtitle: const Text('Deteksi tepi objek dengan Canny'),
-                      onChanged: isSpatialDomain
-                          ? (value) {
-                              setState(() => _edgeDetect = value);
-                              _schedulePreviewRefresh();
-                            }
-                          : null,
-                    ),
-                    if (_edgeDetect) ...[
-                      _buildSlider(
-                        label: 'Canny Threshold 1',
-                        value: _cannyThreshold1,
-                        min: 0,
-                        max: 255,
-                        divisions: 51,
-                        valueText: _cannyThreshold1.toStringAsFixed(0),
-                        enabled: isSpatialDomain,
-                        onChanged: (value) {
-                          setState(() => _cannyThreshold1 = value);
-                          _schedulePreviewRefresh();
-                        },
-                      ),
-                      _buildSlider(
-                        label: 'Canny Threshold 2',
-                        value: _cannyThreshold2,
-                        min: 0,
-                        max: 255,
-                        divisions: 51,
-                        valueText: _cannyThreshold2.toStringAsFixed(0),
-                        enabled: isSpatialDomain,
-                        onChanged: (value) {
-                          setState(() => _cannyThreshold2 = value);
-                          _schedulePreviewRefresh();
-                        },
                       ),
                     ],
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _thresholding,
-                      title: const Text('Thresholding'),
-                      subtitle: const Text(
-                        'Segmentasi biner berdasarkan intensitas',
-                      ),
-                      onChanged: isSpatialDomain
-                          ? (value) {
-                              setState(() => _thresholding = value);
-                              _schedulePreviewRefresh();
-                            }
-                          : null,
-                    ),
-                    if (_thresholding)
-                      _buildSlider(
-                        label: 'Threshold Value',
-                        value: _thresholdValue,
-                        min: 0,
-                        max: 255,
-                        divisions: 51,
-                        valueText: _thresholdValue.toStringAsFixed(0),
-                        enabled: isSpatialDomain,
-                        onChanged: (value) {
-                          setState(() => _thresholdValue = value);
-                          _schedulePreviewRefresh();
-                        },
-                      ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _medianFilter,
-                      title: const Text('Median Filter'),
-                      subtitle: const Text('Mengurangi noise salt-and-pepper'),
-                      onChanged: isSpatialDomain
-                          ? (value) {
-                              setState(() => _medianFilter = value);
-                              _schedulePreviewRefresh();
-                            }
-                          : null,
-                    ),
-                    if (_medianFilter)
-                      _buildSlider(
-                        label: 'Median Kernel',
-                        value: _medianKernelSize.toDouble(),
-                        min: 3,
-                        max: 11,
-                        divisions: 4,
-                        valueText: _medianKernelSize.toString(),
-                        enabled: isSpatialDomain,
-                        onChanged: (value) {
-                          setState(() => _medianKernelSize = value.round());
-                          _schedulePreviewRefresh();
-                        },
-                      ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _gammaCorrection,
-                      title: const Text('Gamma Correction'),
-                      subtitle: const Text(
-                        'Koreksi nonlinear pencahayaan gambar',
-                      ),
-                      onChanged: (value) {
-                        if (!isSpatialDomain) return;
-                        setState(() => _gammaCorrection = value);
-                        _schedulePreviewRefresh();
-                      },
-                    ),
-                    if (_gammaCorrection)
-                      _buildSlider(
-                        label: 'Gamma',
-                        value: _gamma,
-                        min: 0.2,
-                        max: 3.0,
-                        divisions: 28,
-                        valueText: _gamma.toStringAsFixed(2),
-                        enabled: isSpatialDomain,
-                        onChanged: (value) {
-                          setState(() => _gamma = value);
-                          _schedulePreviewRefresh();
-                        },
-                      ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _fftShift,
-                      title: const Text('FFT Shift (DC Centering)'),
-                      subtitle: const Text(
-                        'Pusatkan komponen DC pada visualisasi spektrum',
-                      ),
-                      onChanged: (value) {
-                        setState(() => _fftShift = value);
-                        if (_activeDomain == VisionImageDomain.frequency) {
-                          _transformToFrequencyDomain();
-                        }
-                      },
-                    ),
-                  ],
+                  ),
                 ),
-              ),
+                _buildFilterCard(
+                  icon: Icons.contrast,
+                  label: 'Contrast',
+                  isActive: (_contrast - 1.0).abs() > 0.001,
+                  enabled: isSpatialDomain,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _contrast.toStringAsFixed(2),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: 100,
+                        child: Slider(
+                          value: _contrast,
+                          min: 0.5,
+                          max: 2.0,
+                          divisions: 30,
+                          onChanged: isSpatialDomain
+                              ? (value) {
+                                  setState(() => _contrast = value);
+                                  _schedulePreviewRefresh();
+                                }
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildFilterToggleCard(
+                  icon: Icons.tonality,
+                  label: 'Grayscale',
+                  value: _histogramEqualization,
+                  enabled: isSpatialDomain,
+                  onChanged: isSpatialDomain
+                      ? (value) {
+                          setState(() => _histogramEqualization = value);
+                          _schedulePreviewRefresh();
+                        }
+                      : null,
+                ),
+                _buildFilterToggleCard(
+                  icon: Icons.blur_on,
+                  label: 'Gaussian\nBlur',
+                  value: _gaussianBlur,
+                  enabled: isSpatialDomain,
+                  onChanged: isSpatialDomain
+                      ? (value) {
+                          setState(() => _gaussianBlur = value);
+                          _schedulePreviewRefresh();
+                        }
+                      : null,
+                  child: _gaussianBlur
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 8),
+                            Text(
+                              'Kernel: ${_gaussianKernelSize}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              child: Slider(
+                                value: _gaussianKernelSize.toDouble(),
+                                min: 3,
+                                max: 11,
+                                divisions: 4,
+                                onChanged: isSpatialDomain
+                                    ? (value) {
+                                        setState(
+                                          () => _gaussianKernelSize = value
+                                              .round(),
+                                        );
+                                        _schedulePreviewRefresh();
+                                      }
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        )
+                      : null,
+                ),
+                _buildFilterToggleCard(
+                  icon: Icons.details,
+                  label: 'Sharpening',
+                  value: _sharpening,
+                  enabled: isSpatialDomain,
+                  onChanged: isSpatialDomain
+                      ? (value) {
+                          setState(() => _sharpening = value);
+                          _schedulePreviewRefresh();
+                        }
+                      : null,
+                ),
+                _buildFilterToggleCard(
+                  icon: Icons.grain,
+                  label: 'Edge\nDetection',
+                  value: _edgeDetect,
+                  enabled: isSpatialDomain,
+                  onChanged: isSpatialDomain
+                      ? (value) {
+                          setState(() => _edgeDetect = value);
+                          _schedulePreviewRefresh();
+                        }
+                      : null,
+                  child: _edgeDetect
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 8),
+                            Text(
+                              'T1: ${_cannyThreshold1.toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              child: Slider(
+                                value: _cannyThreshold1,
+                                min: 0,
+                                max: 255,
+                                divisions: 51,
+                                onChanged: isSpatialDomain
+                                    ? (value) {
+                                        setState(
+                                          () => _cannyThreshold1 = value,
+                                        );
+                                        _schedulePreviewRefresh();
+                                      }
+                                    : null,
+                              ),
+                            ),
+                            Text(
+                              'T2: ${_cannyThreshold2.toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              child: Slider(
+                                value: _cannyThreshold2,
+                                min: 0,
+                                max: 255,
+                                divisions: 51,
+                                onChanged: isSpatialDomain
+                                    ? (value) {
+                                        setState(
+                                          () => _cannyThreshold2 = value,
+                                        );
+                                        _schedulePreviewRefresh();
+                                      }
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        )
+                      : null,
+                ),
+                _buildFilterToggleCard(
+                  icon: Icons.image_search,
+                  label: 'Thresholding',
+                  value: _thresholding,
+                  enabled: isSpatialDomain,
+                  onChanged: isSpatialDomain
+                      ? (value) {
+                          setState(() => _thresholding = value);
+                          _schedulePreviewRefresh();
+                        }
+                      : null,
+                  child: _thresholding
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 8),
+                            Text(
+                              'Value: ${_thresholdValue.toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              child: Slider(
+                                value: _thresholdValue,
+                                min: 0,
+                                max: 255,
+                                divisions: 51,
+                                onChanged: isSpatialDomain
+                                    ? (value) {
+                                        setState(() => _thresholdValue = value);
+                                        _schedulePreviewRefresh();
+                                      }
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        )
+                      : null,
+                ),
+                _buildFilterToggleCard(
+                  icon: Icons.blur_circular,
+                  label: 'Median\nFilter',
+                  value: _medianFilter,
+                  enabled: isSpatialDomain,
+                  onChanged: isSpatialDomain
+                      ? (value) {
+                          setState(() => _medianFilter = value);
+                          _schedulePreviewRefresh();
+                        }
+                      : null,
+                  child: _medianFilter
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 8),
+                            Text(
+                              'Kernel: ${_medianKernelSize}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              child: Slider(
+                                value: _medianKernelSize.toDouble(),
+                                min: 3,
+                                max: 11,
+                                divisions: 4,
+                                onChanged: isSpatialDomain
+                                    ? (value) {
+                                        setState(
+                                          () =>
+                                              _medianKernelSize = value.round(),
+                                        );
+                                        _schedulePreviewRefresh();
+                                      }
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        )
+                      : null,
+                ),
+                _buildFilterToggleCard(
+                  icon: Icons.brightness_high,
+                  label: 'Gamma\nCorrection',
+                  value: _gammaCorrection,
+                  enabled: isSpatialDomain,
+                  onChanged: isSpatialDomain
+                      ? (value) {
+                          setState(() => _gammaCorrection = value);
+                          _schedulePreviewRefresh();
+                        }
+                      : null,
+                  child: _gammaCorrection
+                      ? Column(
+                          children: [
+                            const SizedBox(height: 8),
+                            Text(
+                              _gamma.toStringAsFixed(2),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                            SizedBox(
+                              width: 100,
+                              child: Slider(
+                                value: _gamma,
+                                min: 0.2,
+                                max: 3.0,
+                                divisions: 28,
+                                onChanged: isSpatialDomain
+                                    ? (value) {
+                                        setState(() => _gamma = value);
+                                        _schedulePreviewRefresh();
+                                      }
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 8),
+              ],
             ),
           ),
         ],
@@ -1668,34 +1779,98 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
     );
   }
 
-  Widget _buildSlider({
+  Widget _buildFilterCard({
+    required IconData icon,
     required String label,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String valueText,
+    required bool isActive,
     required bool enabled,
-    required ValueChanged<double> onChanged,
+    required Widget child,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-            Text(valueText, style: TextStyle(color: Colors.grey.shade700)),
-          ],
+    return Container(
+      width: 140,
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      child: Card(
+        elevation: isActive ? 4 : 1,
+        color: isActive
+            ? Colors.deepPurple.withValues(alpha: 0.1)
+            : Colors.white,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  color: isActive ? Colors.deepPurple : Colors.grey.shade400,
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? Colors.deepPurple : Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                child,
+              ],
+            ),
+          ),
         ),
-        Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: divisions,
-          onChanged: enabled ? onChanged : null,
+      ),
+    );
+  }
+
+  Widget _buildFilterToggleCard({
+    required IconData icon,
+    required String label,
+    required bool value,
+    required bool enabled,
+    required Function(bool)? onChanged,
+    Widget? child,
+  }) {
+    return Container(
+      width: 140,
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      child: Card(
+        elevation: value ? 4 : 1,
+        color: value ? Colors.deepPurple.withValues(alpha: 0.1) : Colors.white,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  color: value ? Colors.deepPurple : Colors.grey.shade400,
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: value ? Colors.deepPurple : Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Switch.adaptive(
+                  value: value,
+                  onChanged: enabled ? onChanged : null,
+                ),
+                if (child != null) child,
+              ],
+            ),
+          ),
         ),
-      ],
+      ),
     );
   }
 
@@ -1705,9 +1880,9 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
       backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
         title: const Text('Preview Foto PCD'),
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF4E342E),
         surfaceTintColor: Colors.white,
-        foregroundColor: Colors.black87,
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           TextButton.icon(
@@ -1768,12 +1943,15 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
             // Back button (bottom)
             Padding(
               padding: const EdgeInsets.all(16),
-              child: FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back_rounded),
-                label: const Text('Kembali ke Kamera'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text('Kembali ke Kamera'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
                 ),
               ),
             ),
