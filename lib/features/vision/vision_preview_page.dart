@@ -24,8 +24,21 @@ class VisionPreviewPage extends StatefulWidget {
 class _VisionPreviewPageState extends State<VisionPreviewPage> {
   double _brightness = 0.0;
   double _contrast = 1.0;
-  bool _grayscale = false;
+  bool _histogramEqualization = false;
+  bool _gaussianBlur = false;
+  int _gaussianKernelSize = 3;
+  bool _sharpening = false;
   bool _edgeDetect = false;
+  double _cannyThreshold1 = 80;
+  double _cannyThreshold2 = 160;
+  bool _thresholding = false;
+  double _thresholdValue = 120;
+  bool _medianFilter = false;
+  int _medianKernelSize = 3;
+  bool _gammaCorrection = false;
+  double _gamma = 1.0;
+  bool _fftShift = true;
+  VisionImageDomain _activeDomain = VisionImageDomain.spatial;
 
   Uint8List? _previewBytes;
   Uint8List? _originalBytes;
@@ -77,10 +90,27 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
     _debounceTimer = Timer(delay, () async {
       final result = await widget.controller.buildInteractivePreview(
         widget.capturedImage,
-        brightness: _brightness,
-        contrast: _contrast,
-        grayscale: _grayscale,
-        edgeDetect: _edgeDetect,
+        activeDomain: _activeDomain,
+        options: VisionPipelineOptions(
+          brightness: _brightness,
+          contrast: _contrast,
+          histogramEqualization: _histogramEqualization,
+          gaussianBlur: _gaussianBlur,
+          gaussianKernelSize: _gaussianKernelSize,
+          sharpening: _sharpening,
+          edgeDetectionCanny: _edgeDetect,
+          cannyThreshold1: _cannyThreshold1,
+          cannyThreshold2: _cannyThreshold2,
+          thresholding: _thresholding,
+          thresholdValue: _thresholdValue,
+          medianFilter: _medianFilter,
+          medianKernelSize: _medianKernelSize,
+          gammaCorrection: _gammaCorrection,
+          gamma: _gamma,
+          frequencyMagnitude: _activeDomain == VisionImageDomain.frequency,
+          fftShift: _fftShift,
+          inverseDft: false,
+        ),
       );
 
       if (!mounted || version != _requestVersion) {
@@ -98,7 +128,91 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
         _histogram = result.histogram;
         _metrics = result.metrics;
         _modeLabel = result.modeLabel;
+        _activeDomain = result.activeDomain;
       });
+    });
+  }
+
+  Future<void> _transformToFrequencyDomain() async {
+    setState(() {
+      _isProcessing = true;
+      _error = null;
+    });
+
+    final result = await widget.controller.buildInteractivePreview(
+      widget.capturedImage,
+      activeDomain: VisionImageDomain.spatial,
+      options: VisionPipelineOptions(
+        brightness: _brightness,
+        contrast: _contrast,
+        histogramEqualization: _histogramEqualization,
+        gaussianBlur: _gaussianBlur,
+        gaussianKernelSize: _gaussianKernelSize,
+        sharpening: _sharpening,
+        edgeDetectionCanny: _edgeDetect,
+        cannyThreshold1: _cannyThreshold1,
+        cannyThreshold2: _cannyThreshold2,
+        thresholding: _thresholding,
+        thresholdValue: _thresholdValue,
+        medianFilter: _medianFilter,
+        medianKernelSize: _medianKernelSize,
+        gammaCorrection: _gammaCorrection,
+        gamma: _gamma,
+        frequencyMagnitude: true,
+        fftShift: _fftShift,
+      ),
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isProcessing = false;
+      if (result == null) {
+        _error =
+            widget.controller.errorMessage ??
+            'Gagal mengubah domain ke frequency';
+        return;
+      }
+
+      _previewBytes = result.previewPng;
+      _histogram = result.histogram;
+      _metrics = result.metrics;
+      _modeLabel = result.modeLabel;
+      _activeDomain = result.activeDomain;
+    });
+  }
+
+  Future<void> _inverseDftToSpatial() async {
+    setState(() {
+      _isProcessing = true;
+      _error = null;
+    });
+
+    final result = await widget.controller.buildInteractivePreview(
+      widget.capturedImage,
+      activeDomain: VisionImageDomain.frequency,
+      options: VisionPipelineOptions(
+        fftShift: _fftShift,
+        frequencyMagnitude: true,
+        inverseDft: true,
+      ),
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isProcessing = false;
+      if (result == null) {
+        _error =
+            widget.controller.errorMessage ?? 'Gagal melakukan inverse DFT';
+        return;
+      }
+
+      _previewBytes = result.previewPng;
+      _histogram = result.histogram;
+      _metrics = result.metrics;
+      _modeLabel = result.modeLabel;
+      _activeDomain = result.activeDomain;
     });
   }
 
@@ -106,8 +220,21 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
     setState(() {
       _brightness = 0.0;
       _contrast = 1.0;
-      _grayscale = false;
+      _histogramEqualization = false;
+      _gaussianBlur = false;
+      _gaussianKernelSize = 3;
+      _sharpening = false;
       _edgeDetect = false;
+      _cannyThreshold1 = 80;
+      _cannyThreshold2 = 160;
+      _thresholding = false;
+      _thresholdValue = 120;
+      _medianFilter = false;
+      _medianKernelSize = 3;
+      _gammaCorrection = false;
+      _gamma = 1.0;
+      _fftShift = true;
+      _activeDomain = VisionImageDomain.spatial;
     });
     _schedulePreviewRefresh();
   }
@@ -140,7 +267,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 20,
             offset: const Offset(0, 12),
           ),
@@ -169,7 +296,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
                 Container(color: Colors.black),
               if (_isProcessing)
                 Container(
-                  color: Colors.black.withOpacity(0.45),
+                  color: Colors.black.withValues(alpha: 0.45),
                   child: const Center(child: CircularProgressIndicator()),
                 ),
               Positioned(
@@ -181,7 +308,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.black.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -202,7 +329,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.blueGrey.withOpacity(0.75),
+                    color: Colors.blueGrey.withValues(alpha: 0.75),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: const Text(
@@ -360,6 +487,8 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
   }
 
   Widget _buildControlsCard() {
+    final isSpatialDomain = _activeDomain == VisionImageDomain.spatial;
+
     return Card(
       elevation: 0,
       color: Colors.white,
@@ -386,6 +515,32 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                InputChip(
+                  selected: _activeDomain == VisionImageDomain.spatial,
+                  label: const Text('Spatial Domain'),
+                  onSelected: (_) {
+                    setState(() => _activeDomain = VisionImageDomain.spatial);
+                    _schedulePreviewRefresh(immediate: true);
+                  },
+                ),
+                InputChip(
+                  selected: _activeDomain == VisionImageDomain.frequency,
+                  label: const Text('Frequency Domain'),
+                  onSelected: (_) => _transformToFrequencyDomain(),
+                ),
+                if (_activeDomain == VisionImageDomain.frequency)
+                  ActionChip(
+                    avatar: const Icon(Icons.undo_rounded, size: 18),
+                    label: const Text('Inverse DFT'),
+                    onPressed: _inverseDftToSpatial,
+                  ),
+              ],
+            ),
             const SizedBox(height: 12),
             _buildSlider(
               label: 'Brightness',
@@ -394,6 +549,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
               max: 1.0,
               divisions: 20,
               valueText: _brightness.toStringAsFixed(2),
+              enabled: isSpatialDomain,
               onChanged: (value) {
                 setState(() => _brightness = value);
                 _schedulePreviewRefresh();
@@ -407,6 +563,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
               max: 2.0,
               divisions: 30,
               valueText: _contrast.toStringAsFixed(2),
+              enabled: isSpatialDomain,
               onChanged: (value) {
                 setState(() => _contrast = value);
                 _schedulePreviewRefresh();
@@ -415,22 +572,185 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
             const SizedBox(height: 8),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
-              value: _grayscale,
-              title: const Text('Grayscale'),
-              subtitle: const Text('Ubah tampilan menjadi abu-abu'),
-              onChanged: (value) {
-                setState(() => _grayscale = value);
-                _schedulePreviewRefresh();
-              },
+              value: _histogramEqualization,
+              title: const Text('Histogram Equalization'),
+              subtitle: const Text('Tingkatkan kontras global grayscale'),
+              onChanged: isSpatialDomain
+                  ? (value) {
+                      setState(() => _histogramEqualization = value);
+                      _schedulePreviewRefresh();
+                    }
+                  : null,
+            ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _gaussianBlur,
+              title: const Text('Gaussian Blur'),
+              subtitle: const Text('Peredam noise berbasis kernel gaussian'),
+              onChanged: isSpatialDomain
+                  ? (value) {
+                      setState(() => _gaussianBlur = value);
+                      _schedulePreviewRefresh();
+                    }
+                  : null,
+            ),
+            if (_gaussianBlur)
+              _buildSlider(
+                label: 'Gaussian Kernel',
+                value: _gaussianKernelSize.toDouble(),
+                min: 3,
+                max: 11,
+                divisions: 4,
+                valueText: _gaussianKernelSize.toString(),
+                enabled: isSpatialDomain,
+                onChanged: (value) {
+                  setState(() => _gaussianKernelSize = value.round());
+                  _schedulePreviewRefresh();
+                },
+              ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _sharpening,
+              title: const Text('Sharpening'),
+              subtitle: const Text(
+                'Menonjolkan detail tepi menggunakan kernel',
+              ),
+              onChanged: isSpatialDomain
+                  ? (value) {
+                      setState(() => _sharpening = value);
+                      _schedulePreviewRefresh();
+                    }
+                  : null,
             ),
             SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               value: _edgeDetect,
-              title: const Text('Edge Detect'),
-              subtitle: const Text('Tampilkan tepi objek / kerusakan'),
+              title: const Text('Edge Detection (Canny)'),
+              subtitle: const Text('Deteksi tepi objek dengan Canny'),
+              onChanged: isSpatialDomain
+                  ? (value) {
+                      setState(() => _edgeDetect = value);
+                      _schedulePreviewRefresh();
+                    }
+                  : null,
+            ),
+            if (_edgeDetect) ...[
+              _buildSlider(
+                label: 'Canny Threshold 1',
+                value: _cannyThreshold1,
+                min: 0,
+                max: 255,
+                divisions: 51,
+                valueText: _cannyThreshold1.toStringAsFixed(0),
+                enabled: isSpatialDomain,
+                onChanged: (value) {
+                  setState(() => _cannyThreshold1 = value);
+                  _schedulePreviewRefresh();
+                },
+              ),
+              _buildSlider(
+                label: 'Canny Threshold 2',
+                value: _cannyThreshold2,
+                min: 0,
+                max: 255,
+                divisions: 51,
+                valueText: _cannyThreshold2.toStringAsFixed(0),
+                enabled: isSpatialDomain,
+                onChanged: (value) {
+                  setState(() => _cannyThreshold2 = value);
+                  _schedulePreviewRefresh();
+                },
+              ),
+            ],
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _thresholding,
+              title: const Text('Thresholding'),
+              subtitle: const Text('Segmentasi biner berdasarkan intensitas'),
+              onChanged: isSpatialDomain
+                  ? (value) {
+                      setState(() => _thresholding = value);
+                      _schedulePreviewRefresh();
+                    }
+                  : null,
+            ),
+            if (_thresholding)
+              _buildSlider(
+                label: 'Threshold Value',
+                value: _thresholdValue,
+                min: 0,
+                max: 255,
+                divisions: 51,
+                valueText: _thresholdValue.toStringAsFixed(0),
+                enabled: isSpatialDomain,
+                onChanged: (value) {
+                  setState(() => _thresholdValue = value);
+                  _schedulePreviewRefresh();
+                },
+              ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _medianFilter,
+              title: const Text('Median Filter'),
+              subtitle: const Text('Mengurangi noise salt-and-pepper'),
+              onChanged: isSpatialDomain
+                  ? (value) {
+                      setState(() => _medianFilter = value);
+                      _schedulePreviewRefresh();
+                    }
+                  : null,
+            ),
+            if (_medianFilter)
+              _buildSlider(
+                label: 'Median Kernel',
+                value: _medianKernelSize.toDouble(),
+                min: 3,
+                max: 11,
+                divisions: 4,
+                valueText: _medianKernelSize.toString(),
+                enabled: isSpatialDomain,
+                onChanged: (value) {
+                  setState(() => _medianKernelSize = value.round());
+                  _schedulePreviewRefresh();
+                },
+              ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _gammaCorrection,
+              title: const Text('Gamma Correction'),
+              subtitle: const Text('Koreksi nonlinear pencahayaan gambar'),
               onChanged: (value) {
-                setState(() => _edgeDetect = value);
+                if (!isSpatialDomain) return;
+                setState(() => _gammaCorrection = value);
                 _schedulePreviewRefresh();
+              },
+            ),
+            if (_gammaCorrection)
+              _buildSlider(
+                label: 'Gamma',
+                value: _gamma,
+                min: 0.2,
+                max: 3.0,
+                divisions: 28,
+                valueText: _gamma.toStringAsFixed(2),
+                enabled: isSpatialDomain,
+                onChanged: (value) {
+                  setState(() => _gamma = value);
+                  _schedulePreviewRefresh();
+                },
+              ),
+            SwitchListTile.adaptive(
+              contentPadding: EdgeInsets.zero,
+              value: _fftShift,
+              title: const Text('FFT Shift (DC Centering)'),
+              subtitle: const Text(
+                'Pusatkan komponen DC pada visualisasi spektrum',
+              ),
+              onChanged: (value) {
+                setState(() => _fftShift = value);
+                if (_activeDomain == VisionImageDomain.frequency) {
+                  _transformToFrequencyDomain();
+                }
               },
             ),
           ],
@@ -446,6 +766,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
     required double max,
     required int divisions,
     required String valueText,
+    required bool enabled,
     required ValueChanged<double> onChanged,
   }) {
     return Column(
@@ -463,7 +784,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
           min: min,
           max: max,
           divisions: divisions,
-          onChanged: onChanged,
+          onChanged: enabled ? onChanged : null,
         ),
       ],
     );

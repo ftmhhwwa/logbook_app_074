@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import 'package:opencv_dart/opencv_dart.dart' as cv;
 
 /// VisionController manages the camera lifecycle and detection logic
 /// for the Smart Patrol System.
@@ -216,47 +216,367 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
   /// Returns PNG bytes plus histogram and metrics for the preview page.
   Future<PhotoPreviewResult?> buildInteractivePreview(
     XFile capturedPhoto, {
-    double brightness = 0.0,
-    double contrast = 1.0,
-    bool grayscale = false,
-    bool edgeDetect = false,
+    required VisionPipelineOptions options,
+    required VisionImageDomain activeDomain,
   }) async {
     try {
       final bytes = await capturedPhoto.readAsBytes();
-      final payload = <String, dynamic>{
-        'bytes': Uint8List.fromList(bytes),
-        'brightness': brightness,
-        'contrast': contrast,
-        'grayscale': grayscale,
-        'edgeDetect': edgeDetect,
-      };
-      final result = await compute(_pcdPhotoWorker, payload);
-
-      if (result['metrics'] is Map<String, dynamic>) {
-        lastPcdResult = result['metrics'] as Map<String, dynamic>;
-      }
-
-      final previewBytes = result['previewPng'];
-      final histogram = (result['histogram'] as List?)?.cast<int>();
-
-      if (previewBytes is Uint8List && histogram != null) {
+      final validation = _validateDomain(activeDomain, options);
+      if (!validation.isValid) {
+        errorMessage = validation.message;
         _notifySafely();
-        return PhotoPreviewResult(
-          previewPng: previewBytes,
-          histogram: histogram,
-          metrics: result['metrics'] as Map<String, dynamic>? ?? const {},
-          modeLabel: result['modeLabel']?.toString() ?? 'Preview',
-        );
+        return null;
       }
 
-      errorMessage = result['error']?.toString() ?? 'Failed to build preview';
+      final result = _buildOpenCvPreview(
+        bytes,
+        options: options,
+        activeDomain: activeDomain,
+      );
+
+      lastPcdResult = result.metrics;
       _notifySafely();
-      return null;
+      return result;
     } catch (e) {
       errorMessage = 'Failed to process filtered preview: $e';
       _notifySafely();
       return null;
     }
+  }
+
+  _DomainValidation _validateDomain(
+    VisionImageDomain domain,
+    VisionPipelineOptions options,
+  ) {
+    final usesSpatialOperations =
+        options.brightness.abs() > 0.001 ||
+        (options.contrast - 1.0).abs() > 0.001 ||
+        options.histogramEqualization ||
+        options.gaussianBlur ||
+        options.sharpening ||
+        options.edgeDetectionCanny ||
+        options.thresholding ||
+        options.medianFilter ||
+        options.gammaCorrection;
+
+    if (domain == VisionImageDomain.frequency && usesSpatialOperations) {
+      return const _DomainValidation(
+        isValid: false,
+        message:
+            'Operasi spasial tidak tersedia saat domain frequency aktif. Kembali ke domain spatial terlebih dahulu.',
+      );
+    }
+
+    if (domain == VisionImageDomain.spatial && options.inverseDft) {
+      return const _DomainValidation(
+        isValid: false,
+        message: 'Inverse DFT hanya valid saat domain frequency aktif.',
+      );
+    }
+
+    return const _DomainValidation(isValid: true);
+  }
+
+  PhotoPreviewResult _buildOpenCvPreview(
+    Uint8List encodedBytes, {
+    required VisionPipelineOptions options,
+    required VisionImageDomain activeDomain,
+  }) {
+    final src = cv.imdecode(encodedBytes, cv.IMREAD_COLOR);
+    if (src.isEmpty) {
+      throw Exception('Unable to decode captured image with OpenCV');
+    }
+
+    cv.Mat gray = cv.cvtColor(src, cv.COLOR_BGR2GRAY);
+
+    if (activeDomain == VisionImageDomain.spatial) {
+      gray = _applySpatialPipeline(gray, options);
+    }
+
+    final wantsFrequency =
+        activeDomain == VisionImageDomain.frequency ||
+        options.frequencyMagnitude;
+
+    if (wantsFrequency) {
+      final frequencyResult = _buildFrequencyPreview(
+        gray,
+        options: options,
+        activeDomain: activeDomain,
+      );
+      src.dispose();
+      gray.dispose();
+      return frequencyResult;
+    }
+
+    final histogram = _buildHistogram(gray);
+    final metrics = _buildMetrics(gray, histogram);
+    final (ok, previewPng) = cv.imencode('.png', gray);
+
+    if (!ok) {
+      throw Exception('Failed to encode OpenCV preview image');
+    }
+
+    src.dispose();
+    gray.dispose();
+
+    return PhotoPreviewResult(
+      previewPng: previewPng,
+      histogram: histogram,
+      metrics: {...metrics, 'status': 'OpenCV spatial pipeline siap'},
+      modeLabel: 'Spatial Domain',
+      activeDomain: VisionImageDomain.spatial,
+    );
+  }
+
+  cv.Mat _applySpatialPipeline(cv.Mat input, VisionPipelineOptions options) {
+    var out = input.clone();
+
+    if (options.brightness.abs() > 0.001 ||
+        (options.contrast - 1.0).abs() > 0.001) {
+      out = out.convertTo(
+        cv.MatType.CV_8UC1,
+        alpha: options.contrast,
+        beta: options.brightness * 100.0,
+      );
+    }
+
+    if (options.histogramEqualization) {
+      out = cv.equalizeHist(out);
+    }
+
+    if (options.gaussianBlur) {
+      final k = _oddKernel(options.gaussianKernelSize);
+      out = cv.gaussianBlur(out, (k, k), 0);
+    }
+
+    if (options.sharpening) {
+      final kernel = cv.Mat.fromList(3, 3, cv.MatType.CV_32FC1, [
+        0.0,
+        -1.0,
+        0.0,
+        -1.0,
+        5.0,
+        -1.0,
+        0.0,
+        -1.0,
+        0.0,
+      ]);
+      out = cv.filter2D(out, -1, kernel);
+      kernel.dispose();
+    }
+
+    if (options.edgeDetectionCanny) {
+      out = cv.canny(out, options.cannyThreshold1, options.cannyThreshold2);
+    }
+
+    if (options.thresholding) {
+      final (_, dst) = cv.threshold(
+        out,
+        options.thresholdValue,
+        255,
+        cv.THRESH_BINARY,
+      );
+      out = dst;
+    }
+
+    if (options.medianFilter) {
+      out = cv.medianBlur(out, _oddKernel(options.medianKernelSize));
+    }
+
+    if (options.gammaCorrection) {
+      final gamma = options.gamma <= 0 ? 1.0 : options.gamma;
+      final lut = List<int>.generate(256, (i) {
+        final v = (pow(i / 255.0, 1.0 / gamma) * 255.0).round();
+        return v.clamp(0, 255);
+      });
+      final lutMat = cv.Mat.fromList(1, 256, cv.MatType.CV_8UC1, lut);
+      out = cv.LUT(out, lutMat);
+      lutMat.dispose();
+    }
+
+    return out;
+  }
+
+  PhotoPreviewResult _buildFrequencyPreview(
+    cv.Mat gray, {
+    required VisionPipelineOptions options,
+    required VisionImageDomain activeDomain,
+  }) {
+    final optimalRows = cv.getOptimalDFTSize(gray.rows);
+    final optimalCols = cv.getOptimalDFTSize(gray.cols);
+    final padded = cv.copyMakeBorder(
+      gray,
+      0,
+      optimalRows - gray.rows,
+      0,
+      optimalCols - gray.cols,
+      cv.BORDER_CONSTANT,
+      value: cv.Scalar.all(0),
+    );
+
+    final floatMat = padded.convertTo(cv.MatType.CV_32FC1);
+    final zeros = cv.Mat.zeros(
+      floatMat.rows,
+      floatMat.cols,
+      cv.MatType.CV_32FC1,
+    );
+    final complex = cv.merge(cv.VecMat.fromList([floatMat, zeros]));
+    final dft = cv.dft(complex, flags: cv.DFT_COMPLEX_OUTPUT);
+    final planes = cv.split(dft);
+
+    final real = planes[0];
+    final imag = planes[1];
+    final magnitude = cv.magnitude(real, imag);
+    final ones = cv.Mat.ones(
+      magnitude.rows,
+      magnitude.cols,
+      cv.MatType.CV_32FC1,
+    );
+    final magPlus = cv.add(magnitude, ones);
+    final magLog = cv.log(magPlus);
+    final centered = options.fftShift ? _fftShift(magLog) : magLog.clone();
+    final normalized = centered.convertTo(
+      cv.MatType.CV_8UC1,
+      alpha: 1.0,
+      beta: 0.0,
+    );
+    cv.normalize(
+      normalized,
+      normalized,
+      alpha: 0,
+      beta: 255,
+      normType: cv.NORM_MINMAX,
+    );
+
+    cv.Mat output;
+    var nextDomain = VisionImageDomain.frequency;
+    var label = options.fftShift
+        ? 'Frequency Domain (FFT Shifted)'
+        : 'Frequency Domain';
+
+    if (activeDomain == VisionImageDomain.frequency && options.inverseDft) {
+      final restored = cv.idft(dft, flags: cv.DFT_REAL_OUTPUT | cv.DFT_SCALE);
+      cv.normalize(
+        restored,
+        restored,
+        alpha: 0,
+        beta: 255,
+        normType: cv.NORM_MINMAX,
+      );
+      output = restored.convertTo(cv.MatType.CV_8UC1);
+      restored.dispose();
+      nextDomain = VisionImageDomain.spatial;
+      label = 'Spatial Domain (Inverse DFT)';
+    } else {
+      output = normalized.clone();
+    }
+
+    final histogram = _buildHistogram(output);
+    final metrics = _buildMetrics(output, histogram);
+    final (ok, previewPng) = cv.imencode('.png', output);
+
+    if (!ok) {
+      throw Exception('Failed to encode frequency preview image');
+    }
+
+    padded.dispose();
+    floatMat.dispose();
+    zeros.dispose();
+    complex.dispose();
+    dft.dispose();
+    real.dispose();
+    imag.dispose();
+    magnitude.dispose();
+    ones.dispose();
+    magPlus.dispose();
+    magLog.dispose();
+    centered.dispose();
+    normalized.dispose();
+    output.dispose();
+
+    return PhotoPreviewResult(
+      previewPng: previewPng,
+      histogram: histogram,
+      metrics: {
+        ...metrics,
+        'status': 'OpenCV Fourier analysis siap',
+        'fftShift': options.fftShift,
+      },
+      modeLabel: label,
+      activeDomain: nextDomain,
+    );
+  }
+
+  cv.Mat _fftShift(cv.Mat src) {
+    final cx = src.cols ~/ 2;
+    final cy = src.rows ~/ 2;
+
+    final q0 = src.rowRange(0, cy).colRange(0, cx);
+    final q1 = src.rowRange(cy, src.rows).colRange(0, cx);
+    final q2 = src.rowRange(0, cy).colRange(cx, src.cols);
+    final q3 = src.rowRange(cy, src.rows).colRange(cx, src.cols);
+
+    final top = cv.hconcat(q3, q1);
+    final bottom = cv.hconcat(q2, q0);
+    final shifted = cv.vconcat(top, bottom);
+
+    q0.dispose();
+    q1.dispose();
+    q2.dispose();
+    q3.dispose();
+    top.dispose();
+    bottom.dispose();
+
+    return shifted;
+  }
+
+  List<int> _buildHistogram(cv.Mat mat) {
+    final histogram = List<int>.filled(256, 0);
+    final pixels = mat.data;
+
+    for (final p in pixels) {
+      final idx = p.clamp(0, 255).toInt();
+      histogram[idx] += 1;
+    }
+
+    return histogram;
+  }
+
+  Map<String, dynamic> _buildMetrics(cv.Mat mat, List<int> histogram) {
+    var luminanceSum = 0.0;
+    var whitePixels = 0;
+    var peakBin = 0;
+    var peakValue = 0;
+
+    for (var i = 0; i < histogram.length; i++) {
+      final value = histogram[i];
+      luminanceSum += i * value;
+
+      if (i > 127) {
+        whitePixels += value;
+      }
+
+      if (value > peakValue) {
+        peakValue = value;
+        peakBin = i;
+      }
+    }
+
+    final pixelCount = histogram.fold<int>(0, (a, b) => a + b);
+
+    return {
+      'width': mat.cols,
+      'height': mat.rows,
+      'meanLuminance': pixelCount == 0 ? 0.0 : luminanceSum / pixelCount,
+      'histogramPeakBin': peakBin,
+      'histogramPeakValue': peakValue,
+      'edgeDensity': pixelCount == 0 ? 0.0 : whitePixels / pixelCount,
+    };
+  }
+
+  int _oddKernel(int value) {
+    final normalized = value < 3 ? 3 : value;
+    return normalized.isOdd ? normalized : normalized + 1;
   }
 
   /// Handle app lifecycle state changes
@@ -436,13 +756,66 @@ class PhotoPreviewResult {
   final List<int> histogram;
   final Map<String, dynamic> metrics;
   final String modeLabel;
+  final VisionImageDomain activeDomain;
 
   const PhotoPreviewResult({
     required this.previewPng,
     required this.histogram,
     required this.metrics,
     required this.modeLabel,
+    required this.activeDomain,
   });
+}
+
+enum VisionImageDomain { spatial, frequency }
+
+class VisionPipelineOptions {
+  final double brightness;
+  final double contrast;
+  final bool histogramEqualization;
+  final bool gaussianBlur;
+  final int gaussianKernelSize;
+  final bool sharpening;
+  final bool edgeDetectionCanny;
+  final double cannyThreshold1;
+  final double cannyThreshold2;
+  final bool thresholding;
+  final double thresholdValue;
+  final bool medianFilter;
+  final int medianKernelSize;
+  final bool gammaCorrection;
+  final double gamma;
+  final bool frequencyMagnitude;
+  final bool fftShift;
+  final bool inverseDft;
+
+  const VisionPipelineOptions({
+    this.brightness = 0.0,
+    this.contrast = 1.0,
+    this.histogramEqualization = false,
+    this.gaussianBlur = false,
+    this.gaussianKernelSize = 3,
+    this.sharpening = false,
+    this.edgeDetectionCanny = false,
+    this.cannyThreshold1 = 80,
+    this.cannyThreshold2 = 160,
+    this.thresholding = false,
+    this.thresholdValue = 120,
+    this.medianFilter = false,
+    this.medianKernelSize = 3,
+    this.gammaCorrection = false,
+    this.gamma = 1.0,
+    this.frequencyMagnitude = false,
+    this.fftShift = true,
+    this.inverseDft = false,
+  });
+}
+
+class _DomainValidation {
+  final bool isValid;
+  final String? message;
+
+  const _DomainValidation({required this.isValid, this.message});
 }
 
 /// Isolate worker for PCD pipeline.
@@ -529,91 +902,5 @@ Map<String, dynamic> _pcdWorker(Map<String, dynamic> payload) {
     'histogramPeakBin': peakBin,
     'histogramPeakValue': peakValue,
     'edgeDensity': edgeDensity,
-  };
-}
-
-/// Isolate worker for captured-photo preview processing.
-/// Input payload keys:
-/// - bytes: Uint8List (encoded image: jpg/png)
-Map<String, dynamic> _pcdPhotoWorker(Map<String, dynamic> payload) {
-  final bytes = payload['bytes'] as Uint8List;
-  final brightness = (payload['brightness'] as num?)?.toDouble() ?? 0.0;
-  final contrast = (payload['contrast'] as num?)?.toDouble() ?? 1.0;
-  final grayscale = payload['grayscale'] as bool? ?? false;
-  final edgeDetect = payload['edgeDetect'] as bool? ?? false;
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) {
-    return {'error': 'Unable to decode captured image'};
-  }
-
-  // Resize first to keep CPU processing fast and stable.
-  final resized = img.copyResize(decoded, width: 720);
-
-  // PCD pipeline: brightness/contrast -> optional grayscale -> optional edge detect.
-  final adjustedImg = img.adjustColor(
-    resized,
-    brightness: brightness,
-    contrast: contrast,
-  );
-  final analysisBase = grayscale ? img.grayscale(adjustedImg) : adjustedImg;
-
-  img.Image previewImg = analysisBase;
-  if (edgeDetect) {
-    final graySource = img.grayscale(adjustedImg);
-    final blurredImg = img.gaussianBlur(graySource, radius: 3);
-    const edgeKernel = <num>[-1, -1, -1, -1, 8, -1, -1, -1, -1];
-    final edgeImg = img.convolution(
-      blurredImg,
-      filter: edgeKernel,
-      div: 1,
-      offset: 0,
-    );
-    previewImg = img.luminanceThreshold(edgeImg, threshold: 100);
-  }
-
-  // Basic metrics for overlay/debug status.
-  final histogram = List<int>.filled(256, 0);
-  var luminanceSum = 0;
-  var whitePixels = 0;
-  var pixelCount = 0;
-
-  for (final p in previewImg) {
-    final lum = p.r.toInt().clamp(0, 255);
-    histogram[lum] += 1;
-    luminanceSum += lum;
-    if (lum > 127) whitePixels += 1;
-    pixelCount += 1;
-  }
-
-  var peakBin = 0;
-  var peakValue = 0;
-  for (var i = 0; i < histogram.length; i++) {
-    if (histogram[i] > peakValue) {
-      peakValue = histogram[i];
-      peakBin = i;
-    }
-  }
-
-  final meanLuminance = pixelCount == 0 ? 0.0 : luminanceSum / pixelCount;
-  final edgeDensity = pixelCount == 0 ? 0.0 : whitePixels / pixelCount;
-  final pngBytes = Uint8List.fromList(img.encodePng(previewImg));
-
-  return {
-    'previewPng': pngBytes,
-    'histogram': histogram,
-    'modeLabel': edgeDetect
-        ? 'Edge Detect'
-        : grayscale
-        ? 'Grayscale'
-        : 'Color Preview',
-    'metrics': {
-      'status': 'Preview filter siap',
-      'width': previewImg.width,
-      'height': previewImg.height,
-      'meanLuminance': meanLuminance,
-      'histogramPeakBin': peakBin,
-      'histogramPeakValue': peakValue,
-      'edgeDensity': edgeDensity,
-    },
   };
 }

@@ -28,7 +28,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
-  camera: ^0.12.0+1  # Mengakses hardware kamera
+  camera: ^0.12.0+1 # Mengakses hardware kamera
   permission_handler: ^12.0.1
   flutter:
     sdk: flutter
@@ -46,6 +46,7 @@ dependencies:
   flutter_markdown: ^0.7.7+1
   flutter_svg: ^2.2.1
   image: ^4.8.0
+  opencv_dart: ^2.2.1+4
 
 dev_dependencies:
   flutter_test:
@@ -72,10 +73,10 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-     - assets/images/onboarding1.png
-     - assets/images/onboarding2.png
-     - assets/images/onboarding3.png
-     - .env
+    - assets/images/onboarding1.png
+    - assets/images/onboarding2.png
+    - assets/images/onboarding3.png
+    - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -102,3 +103,11 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+hooks:
+  user_defines:
+    dartcv4:
+      android:
+        android_home: "D:/Tools/android-sdk"
+        ndk_version: "28.2.13676358"
+        generator: "Ninja"

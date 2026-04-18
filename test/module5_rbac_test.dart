@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:logbook_app_001/services/access_control_service.dart';
 
 void main() {
-  var actual, expected;
+  bool actual, expected;
 
   group('Module 5 - Access Control (RBAC) Test', () {
     test('TC01: Ketua can delete any log (even if not owner)', () {
