@@ -407,6 +407,19 @@ class _LogViewState extends State<LogView> {
     );
   }
 
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour >= 5 && hour < 11) {
+      return 'Selamat Pagi';
+    } else if (hour >= 11 && hour < 15) {
+      return 'Selamat Siang';
+    } else if (hour >= 15 && hour < 19) {
+      return 'Selamat Sore';
+    } else {
+      return 'Selamat Malam';
+    }
+  }
+
   Future<void> _handleLogout() async {
     final shouldLogout = await showDialog<bool>(
       context: context,
@@ -462,16 +475,18 @@ class _LogViewState extends State<LogView> {
         backgroundColor: const Color(0xFF4E342E),
         foregroundColor: Colors.white,
         actions: [
-          IconButton(onPressed: () => Navigator.push(
-            context, 
-            MaterialPageRoute(builder: (context) => const VisionView())
-            ), 
-            icon: const Icon(Icons.camera_alt_rounded)),
+          IconButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const VisionView()),
+            ),
+            icon: const Icon(Icons.camera_alt_rounded),
+          ),
           IconButton(
             onPressed: _handleLogout,
             icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout'
-          ),          
+            tooltip: 'Logout',
+          ),
         ],
       ),
       body: Container(
@@ -512,7 +527,7 @@ class _LogViewState extends State<LogView> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Halo, ${widget.username}',
+                            '${_getGreeting()}, ${widget.username}',
                             style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),
@@ -526,15 +541,21 @@ class _LogViewState extends State<LogView> {
                           Row(
                             children: [
                               Icon(
-                                _isOffline ? Icons.cloud_off_rounded : Icons.cloud_done_rounded,
+                                _isOffline
+                                    ? Icons.cloud_off_rounded
+                                    : Icons.cloud_done_rounded,
                                 size: 16,
-                                color: _isOffline ? Colors.orange : Colors.green,
+                                color: _isOffline
+                                    ? Colors.orange
+                                    : Colors.green,
                               ),
                               const SizedBox(width: 6),
                               Text(
                                 _isOffline ? 'Offline' : 'Online',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: _isOffline ? Colors.orange : Colors.green,
+                                  color: _isOffline
+                                      ? Colors.orange
+                                      : Colors.green,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),

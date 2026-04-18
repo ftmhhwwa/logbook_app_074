@@ -4,7 +4,6 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'damage_painter.dart';
 import 'vision_controller.dart';
-import 'vision_preview_page.dart';
 
 /// VisionPage implements the layered stack architecture
 /// for Smart Patrol System.
@@ -38,6 +37,9 @@ class _VisionViewState extends State<VisionView> {
       builder: (context, child) => Scaffold(
         appBar: AppBar(
           title: const Text('Smart-Patrol Vision'),
+          backgroundColor: const Color(0xFF4E342E),
+          foregroundColor: Colors.white,
+          elevation: 0,
           actions: [
             IconButton(
               icon: Icon(
@@ -81,46 +83,70 @@ class _VisionViewState extends State<VisionView> {
               return _buildLoadingState();
             }
 
-            return _buildVisionStack();
-          },
-        ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () async {
-            if (!context.mounted) return;
+            return Column(
+              children: [
+                Expanded(child: _buildVisionStack()),
+                // Shutter button at center bottom
+                Container(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 20,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        if (!context.mounted) return;
 
-            showDialog<void>(
-              context: context,
-              barrierDismissible: false,
-              builder: (_) => const Center(child: CircularProgressIndicator()),
-            );
+                        showDialog<void>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) =>
+                              const Center(child: CircularProgressIndicator()),
+                        );
 
-            final image = await _visionController.takePhoto();
+                        final image = await _visionController.takePhoto();
 
-            if (!context.mounted) return;
-            Navigator.of(context, rootNavigator: true).pop();
+                        if (!context.mounted) return;
+                        Navigator.of(context, rootNavigator: true).pop();
 
-            if (image == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    _visionController.errorMessage ?? 'Gagal mengambil foto',
+                        if (image == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                _visionController.errorMessage ??
+                                    'Gagal mengambil foto',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        await Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => VisionPreviewPage(
+                              controller: _visionController,
+                              capturedImage: image,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.camera_rounded, size: 28),
+                      label: const Text(
+                        'Ambil Foto',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: const Color.fromARGB(255, 161, 99, 93),
+                      ),
+                    ),
                   ),
                 ),
-              );
-              return;
-            }
-
-            await Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => VisionPreviewPage(
-                  controller: _visionController,
-                  capturedImage: image,
-                ),
-              ),
+              ],
             );
           },
-          tooltip: 'Capture Photo',
-          child: const Icon(Icons.camera),
         ),
       ),
     );
