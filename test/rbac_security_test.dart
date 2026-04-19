@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:logbook_app_001/features/logbook/models/log_model.dart';
-import 'package:logbook_app_001/services/mongo_service.dart';
+import 'package:logbook_app_074/features/logbook/models/log_model.dart';
+import 'package:logbook_app_074/services/mongo_service.dart';
 
 void main() {
   test(

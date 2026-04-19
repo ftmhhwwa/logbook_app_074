@@ -1,7 +1,7 @@
 import 'dart:developer' as dev;
 import 'package:intl/intl.dart'; // Tetap kita gunakan untuk presisi waktu
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:logbook_app_001/helpers/log_file_writer.dart';
+import 'package:logbook_app_074/helpers/log_file_writer.dart';
 
 class LogHelper {
   static Future<void> writeLog(

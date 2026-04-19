@@ -6,7 +6,7 @@
     <uses-feature android:name="android.hardware.camera.autofocus" />
 
     <application
-        android:label="logbook_app_001"
+        android:label="logbook_app_074"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

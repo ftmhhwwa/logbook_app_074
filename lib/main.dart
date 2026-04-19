@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:logbook_app_001/features/logbook/models/log_model.dart';
-//import 'package:logbook_app_001/features/logbook/counter_view.dart';
-import 'package:logbook_app_001/features/onboarding/onboarding_view.dart';
+import 'package:logbook_app_074/features/logbook/models/log_model.dart';
+//import 'package:logbook_app_074/features/logbook/counter_view.dart';
+import 'package:logbook_app_074/features/onboarding/onboarding_view.dart';
 import 'package:camera/camera.dart';
 
 List<CameraDescription> cameras = []; // Variabel global untuk menyimpan daftar kamera

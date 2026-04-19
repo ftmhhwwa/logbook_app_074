@@ -6,14 +6,14 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
-import 'package:logbook_app_001/features/auth/login_view.dart';
-import 'package:logbook_app_001/features/logbook/log_controller.dart';
-import 'package:logbook_app_001/features/logbook/log_editor_page.dart';
-import 'package:logbook_app_001/features/logbook/models/log_model.dart';
-import 'package:logbook_app_001/helpers/access_policy.dart';
-import 'package:logbook_app_001/services/mongo_service.dart';
+import 'package:logbook_app_074/features/auth/login_view.dart';
+import 'package:logbook_app_074/features/logbook/log_controller.dart';
+import 'package:logbook_app_074/features/logbook/log_editor_page.dart';
+import 'package:logbook_app_074/features/logbook/models/log_model.dart';
+import 'package:logbook_app_074/helpers/access_policy.dart';
+import 'package:logbook_app_074/services/mongo_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:logbook_app_001/features/vision/vision_view.dart';
+import 'package:logbook_app_074/features/vision/vision_view.dart';
 
 class LogView extends StatefulWidget {
   final String username;

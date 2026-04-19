@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart' as hive;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mongo_dart/mongo_dart.dart';
-import 'package:logbook_app_001/helpers/access_policy.dart';
-import 'package:logbook_app_001/features/logbook/models/log_model.dart';
-import 'package:logbook_app_001/services/mongo_service.dart';
-import 'package:logbook_app_001/helpers/log_helper.dart';
+import 'package:logbook_app_074/helpers/access_policy.dart';
+import 'package:logbook_app_074/features/logbook/models/log_model.dart';
+import 'package:logbook_app_074/services/mongo_service.dart';
+import 'package:logbook_app_074/helpers/log_helper.dart';
 
 class LogController {
   final ValueNotifier<List<LogModel>> logsNotifier =

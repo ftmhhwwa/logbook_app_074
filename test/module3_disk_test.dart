@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:logbook_app_001/features/logbook/models/log_model.dart';
+import 'package:logbook_app_074/features/logbook/models/log_model.dart';
 
 void main() {
   var actual, expected;
