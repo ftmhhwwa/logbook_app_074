@@ -46,6 +46,7 @@ dependencies:
   flutter_markdown: ^0.7.7+1
   flutter_svg: ^2.2.1
   image: ^4.8.0
+  image_picker: ^1.1.2
   opencv_dart: ^2.2.1+4
 
 dev_dependencies:

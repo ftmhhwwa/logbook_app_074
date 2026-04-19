@@ -86,62 +86,57 @@ class _VisionViewState extends State<VisionView> {
             return Column(
               children: [
                 Expanded(child: _buildVisionStack()),
-                // Shutter button at center bottom
                 Container(
                   color: Colors.black.withValues(alpha: 0.3),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 20,
                   ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () async {
-                        if (!context.mounted) return;
-
-                        showDialog<void>(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (_) =>
-                              const Center(child: CircularProgressIndicator()),
-                        );
-
-                        final image = await _visionController.takePhoto();
-
-                        if (!context.mounted) return;
-                        Navigator.of(context, rootNavigator: true).pop();
-
-                        if (image == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                _visionController.errorMessage ??
-                                    'Gagal mengambil foto',
-                              ),
-                            ),
-                          );
-                          return;
-                        }
-
-                        await Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => VisionPreviewPage(
-                              controller: _visionController,
-                              capturedImage: image,
-                            ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            await _handleImageAction(
+                              context,
+                              action: _visionController.pickImageFromGallery,
+                              failureMessage: 'Gagal memilih gambar',
+                            );
+                          },
+                          icon: const Icon(Icons.upload_file_rounded, size: 22),
+                          label: const Text(
+                            'Upload Gambar',
+                            style: TextStyle(fontSize: 15),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.camera_rounded, size: 28),
-                      label: const Text(
-                        'Ambil Foto',
-                        style: TextStyle(fontSize: 16),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            foregroundColor: const Color(0xFF4E342E),
+                            side: const BorderSide(color: Color(0xFF4E342E)),
+                          ),
+                        ),
                       ),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: const Color(0xFF4E342E),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () async {
+                            await _handleImageAction(
+                              context,
+                              action: _visionController.takePhoto,
+                              failureMessage: 'Gagal mengambil foto',
+                            );
+                          },
+                          icon: const Icon(Icons.camera_rounded, size: 24),
+                          label: const Text(
+                            'Ambil Foto',
+                            style: TextStyle(fontSize: 15),
+                          ),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            backgroundColor: const Color(0xFF4E342E),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ],
@@ -323,6 +318,43 @@ class _VisionViewState extends State<VisionView> {
         const SizedBox(height: 8),
         Text(label, style: const TextStyle(fontSize: 12)),
       ],
+    );
+  }
+
+  Future<void> _handleImageAction(
+    BuildContext context, {
+    required Future<XFile?> Function() action,
+    required String failureMessage,
+  }) async {
+    if (!context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final image = await action();
+
+    if (!context.mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+
+    if (image == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_visionController.errorMessage ?? failureMessage),
+        ),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VisionPreviewPage(
+          controller: _visionController,
+          capturedImage: image,
+        ),
+      ),
     );
   }
 

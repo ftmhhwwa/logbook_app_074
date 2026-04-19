@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 import 'package:opencv_dart/opencv_dart.dart' as cv;
 
 /// VisionController manages the camera lifecycle and detection logic
@@ -212,6 +213,23 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Pick an image from the gallery for the same preview pipeline.
+  Future<XFile?> pickImageFromGallery() async {
+    try {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+
+      return image;
+    } catch (e) {
+      errorMessage = "Failed to pick image: $e";
+      _notifySafely();
+      return null;
+    }
+  }
+
   /// Build interactive preview image bytes from captured photo.
   /// Returns PNG bytes plus histogram and metrics for the preview page.
   Future<PhotoPreviewResult?> buildInteractivePreview(
@@ -249,6 +267,7 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
     VisionPipelineOptions options,
   ) {
     final usesSpatialOperations =
+        options.inverse ||
         options.brightness.abs() > 0.001 ||
         (options.contrast - 1.0).abs() > 0.001 ||
         options.histogramEqualization ||
@@ -355,7 +374,8 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Check if any spatial operations are enabled
   bool _hasSpatialOperations(VisionPipelineOptions options) {
-    return options.brightness.abs() > 0.001 ||
+    return options.inverse ||
+        options.brightness.abs() > 0.001 ||
         (options.contrast - 1.0).abs() > 0.001 ||
         options.histogramEqualization ||
         options.gaussianBlur ||
@@ -368,6 +388,10 @@ class VisionController extends ChangeNotifier with WidgetsBindingObserver {
 
   cv.Mat _applySpatialPipeline(cv.Mat input, VisionPipelineOptions options) {
     var out = input.clone();
+
+    if (options.inverse) {
+      out = cv.bitwiseNOT(out);
+    }
 
     if (options.brightness.abs() > 0.001 ||
         (options.contrast - 1.0).abs() > 0.001) {
@@ -823,6 +847,7 @@ class VisionPipelineOptions {
   final int medianKernelSize;
   final bool gammaCorrection;
   final double gamma;
+  final bool inverse;
   final bool frequencyMagnitude;
   final bool fftShift;
   final bool inverseDft;
@@ -843,6 +868,7 @@ class VisionPipelineOptions {
     this.medianKernelSize = 3,
     this.gammaCorrection = false,
     this.gamma = 1.0,
+    this.inverse = false,
     this.frequencyMagnitude = false,
     this.fftShift = true,
     this.inverseDft = false,
@@ -887,6 +913,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
   int _medianKernelSize = 3;
   bool _gammaCorrection = false;
   double _gamma = 1.0;
+  bool _inverse = false;
   bool _fftShift = true;
   VisionImageDomain _activeDomain = VisionImageDomain.spatial;
 
@@ -957,6 +984,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
           medianKernelSize: _medianKernelSize,
           gammaCorrection: _gammaCorrection,
           gamma: _gamma,
+          inverse: _inverse,
           frequencyMagnitude: _activeDomain == VisionImageDomain.frequency,
           fftShift: _fftShift,
           inverseDft: false,
@@ -1008,6 +1036,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
         medianKernelSize: _medianKernelSize,
         gammaCorrection: _gammaCorrection,
         gamma: _gamma,
+        inverse: _inverse,
         frequencyMagnitude: true,
         fftShift: _fftShift,
       ),
@@ -1083,6 +1112,7 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
       _medianKernelSize = 3;
       _gammaCorrection = false;
       _gamma = 1.0;
+      _inverse = false;
       _fftShift = true;
       _activeDomain = VisionImageDomain.spatial;
     });
@@ -1768,6 +1798,18 @@ class _VisionPreviewPageState extends State<VisionPreviewPage> {
                             ),
                           ],
                         )
+                      : null,
+                ),
+                _buildFilterToggleCard(
+                  icon: Icons.flip,
+                  label: 'Inverse',
+                  value: _inverse,
+                  enabled: isSpatialDomain,
+                  onChanged: isSpatialDomain
+                      ? (value) {
+                          setState(() => _inverse = value);
+                          _schedulePreviewRefresh();
+                        }
                       : null,
                 ),
                 const SizedBox(width: 8),
